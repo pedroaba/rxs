@@ -1,0 +1,1 @@
+PASS: 3840×2160 export, top/bottom orientation, transparency, annotation pixel coordinates, private clipboard PNG roundtrip, 50 editor/export/close cycles, zero retained canvases and zero temporary captures after each close.
