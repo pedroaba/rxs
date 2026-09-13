@@ -81,6 +81,34 @@ open dist/RXS.app
 
 O pacote fica em `dist/RXS.app`. Para uso diário, mova-o para `/Applications` ou `~/Applications` e abra dessa localização. O script cria uma assinatura ad-hoc para uso local; distribuição pública requer Developer ID e notarização. O script compila para a arquitetura do Mac atual. A validação inicial é em Apple Silicon; Intel ainda precisa de validação própria.
 
+## Builds automáticos e releases
+
+O [workflow de release](.github/workflows/release.yml) é acionado ao enviar uma tag de versão, como `v0.1.0` ou `v0.2.0-rc.1`. Ele executa formatação, Clippy e testes antes de compilar em runners macOS separados para **Apple Silicon (arm64)** e **Intel (x86_64)**. A release só é publicada quando os dois builds terminam e seus pacotes são verificados.
+
+Os downloads ficam em [Releases](https://github.com/pedroaba/rxs/releases):
+
+- `RXS-vX.Y.Z-macos-arm64.zip`: Macs com chip Apple Silicon.
+- `RXS-vX.Y.Z-macos-x86_64.zip`: Macs Intel.
+- Um arquivo `.sha256` para conferir cada ZIP.
+
+Descompacte o ZIP da sua arquitetura e arraste **RXS.app** para **Aplicativos**. Os pacotes têm assinatura ad-hoc, **sem notarização da Apple**; o macOS pode bloquear a primeira abertura. Se você confia na origem do download, use **Ajustes do Sistema → Privacidade e Segurança → Abrir Mesmo Assim** após tentar abrir o app.
+
+### Publicar uma versão
+
+1. Atualize `version` em `Cargo.toml` e o registro do pacote `rxs` em `Cargo.lock` (execute `cargo check` para atualizar o lockfile).
+2. Atualize `CFBundleShortVersionString` em `packaging/Info.plist` para a versão numérica correspondente e incremente `CFBundleVersion`. Para `0.2.0-rc.1`, a versão curta do bundle deve ser `0.2.0`.
+3. Faça commit e envie as alterações, incluindo o workflow, para o GitHub.
+4. Crie e envie a tag correspondente. Por exemplo, para a versão atual `0.1.0`:
+
+```sh
+git tag -a v0.1.0 -m "RXS 0.1.0"
+git push origin v0.1.0
+```
+
+A tag deve corresponder exatamente à versão de `Cargo.toml`; versões com sufixo como `-rc.1` geram uma **pré-release**. Não é necessário configurar secrets: a publicação usa o `GITHUB_TOKEN` automático, com permissão de escrita apenas no job de release. O workflow aceita tags `vMAJOR.MINOR.PATCH` com pré-release opcional, sem metadados `+build`.
+
+Acompanhe a execução em [Actions](https://github.com/pedroaba/rxs/actions/workflows/release.yml). Em caso de falha no upload, a release permanece como rascunho e uma reexecução pode concluí-la. Releases já publicadas não são sobrescritas: publique uma nova tag para uma nova versão. Os builds usam Rust 1.88.0; testes de interface e captura real continuam sujeitos às [validações manuais](validation/README.md).
+
 ## Primeiro uso e captura
 
 1. Abra o RXS e encontre o ícone de enquadramento na barra de menus.

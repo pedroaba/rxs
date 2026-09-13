@@ -1,0 +1,134 @@
+name: Build and release macOS
+
+on:
+  push:
+    tags:
+      - 'v[0-9]*.[0-9]*.[0-9]*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x86_64
+    defaults:
+      run:
+        shell: bash
+    env:
+      MACOSX_DEPLOYMENT_TARGET: '13.0'
+      RELEASE_TAG: ${{ github.ref_name }}
+      BUILD_ARCH: ${{ matrix.arch }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Install Rust
+        run: |
+          rustup toolchain install 1.88.0 --profile minimal --component clippy --component rustfmt
+          rustup default 1.88.0
+
+      - name: Validate release version
+        run: python3 scripts/validate-release.py "$RELEASE_TAG"
+
+      - name: Check code and run tests
+        run: |
+          cargo fmt --check
+          cargo clippy --all-targets --locked -- -D warnings
+          cargo test --locked
+
+      - name: Build app bundle
+        run: bash scripts/bundle.sh
+
+      - name: Package and verify app
+        run: |
+          test "$(uname -m)" = "$BUILD_ARCH"
+          lipo -verify_arch "$BUILD_ARCH" dist/RXS.app/Contents/MacOS/rxs
+          codesign --verify --deep --strict dist/RXS.app
+          archive="RXS-${RELEASE_TAG}-macos-${BUILD_ARCH}.zip"
+          ditto -c -k --sequesterRsrc --keepParent dist/RXS.app "dist/$archive"
+          # Check the actual downloadable bundle, including its executable and signature.
+          check_dir=$(mktemp -d)
+          ditto -x -k "dist/$archive" "$check_dir"
+          test -x "$check_dir/RXS.app/Contents/MacOS/rxs"
+          codesign --verify --deep --strict "$check_dir/RXS.app"
+          cd dist
+          shasum -a 256 "$archive" > "$archive.sha256"
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: rxs-${{ matrix.arch }}
+          path: |
+            dist/RXS-*.zip
+            dist/RXS-*.zip.sha256
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+  release:
+    name: Publish GitHub release
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RELEASE_TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: rxs-*
+          path: artifacts
+          merge-multiple: true
+
+      - name: Verify checksums
+        working-directory: artifacts
+        run: |
+          for arch in arm64 x86_64; do
+            sha256sum --check "RXS-${RELEASE_TAG}-macos-${arch}.zip.sha256"
+          done
+
+      - name: Publish packages
+        shell: bash
+        run: |
+          cat > release-notes.md <<'NOTES'
+          ## Instalar no macOS 13+
+
+          - **Apple Silicon (M1 ou posterior):** baixe o ZIP `arm64`.
+          - **Intel:** baixe o ZIP `x86_64`.
+          - Descompacte e arraste **RXS.app** para **Aplicativos**.
+          - Autorize a Gravação de Tela quando solicitada e configure os atalhos no menu do RXS.
+
+          Os pacotes têm assinatura ad-hoc, sem Developer ID ou notarização da Apple. O macOS pode bloquear a primeira abertura. Se você confia neste download, use **Ajustes do Sistema → Privacidade e Segurança → Abrir Mesmo Assim** após tentar abrir o app.
+
+          Os arquivos `.sha256` permitem conferir a integridade dos downloads. Builds e testes automatizados não substituem a validação manual de captura, permissões e múltiplos monitores.
+          NOTES
+          prerelease=()
+          if [[ "$RELEASE_TAG" == *-* ]]; then
+            prerelease=(--prerelease)
+          fi
+          # Keep uploads in a draft until all assets are present. Reruns can resume a draft.
+          if gh release view "$RELEASE_TAG" --json isDraft > existing-release.json; then
+            python3 -c 'import json; assert json.load(open("existing-release.json"))["isDraft"], "Release already published; use a new version tag"'
+          else
+            gh release create "$RELEASE_TAG" --verify-tag --draft \
+              --title "RXS $RELEASE_TAG" --notes-file release-notes.md "${prerelease[@]}"
+          fi
+          gh release upload "$RELEASE_TAG" artifacts/*.zip artifacts/*.sha256 --clobber
+          gh release edit "$RELEASE_TAG" --draft=false "${prerelease[@]}"
