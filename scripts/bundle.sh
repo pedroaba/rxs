@@ -15,7 +15,14 @@ for size in 16 32 128 256 512; do
 done
 iconutil -c icns target/RXS.iconset -o "$app/Contents/Resources/RXS.icns"
 plutil -lint "$app/Contents/Info.plist"
-# Local ad-hoc signature only. Public distribution needs Developer ID/notarization.
-codesign --force --sign - "$app"
+# A Developer ID identity gives the app a stable identity across updates, which
+# macOS needs in order to preserve privacy permissions such as Screen Recording.
+# Keep ad-hoc signing available for local builds only.
+if [[ -n "${RXS_CODESIGN_IDENTITY:-}" ]]; then
+    codesign --force --options runtime --timestamp --sign "$RXS_CODESIGN_IDENTITY" "$app"
+else
+    codesign --force --sign - "$app"
+    printf 'Aviso: assinatura ad-hoc; permissões do macOS não persistem após recompilar ou atualizar.\n' >&2
+fi
 codesign --verify --strict "$app"
 printf 'App pronto: %s/dist/RXS.app\n' "$PWD"

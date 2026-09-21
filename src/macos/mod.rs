@@ -61,6 +61,7 @@ pub struct AppIvars {
     shortcuts: RefCell<Option<shortcuts::Shortcuts>>,
     capturing: Cell<bool>,
     modal: Cell<bool>,
+    screen_access_requested: Cell<bool>,
     diagnostics_mode: bool,
 }
 
@@ -223,6 +224,7 @@ impl App {
             shortcuts: RefCell::new(None),
             capturing: Cell::new(false),
             modal: Cell::new(false),
+            screen_access_requested: Cell::new(false),
             diagnostics_mode,
         });
         unsafe { msg_send![super(this), init] }
@@ -302,18 +304,25 @@ impl App {
             return true;
         }
         self.ivars().modal.set(true);
-        let granted = objc2_core_graphics::CGRequestScreenCaptureAccess();
+        let granted = if self.ivars().screen_access_requested.replace(true) {
+            false
+        } else {
+            objc2_core_graphics::CGRequestScreenCaptureAccess()
+        };
         if !granted {
             let choice = alert(
                 self.mtm(),
-                "Permitir capturas no macOS",
-                "Autorize o RXS em Ajustes do Sistema → Privacidade e Segurança → Gravação de Tela. Essa permissão é necessária mesmo para screenshots.\n\nDepois, tente capturar novamente. Se o macOS solicitar, encerre e reabra o RXS.",
-                &["Abrir Ajustes", "Agora não"],
+                "Reabra o RXS após autorizar",
+                "Autorize o RXS em Ajustes do Sistema → Privacidade e Segurança → Gravação de Tela. O macOS pode só aplicar essa alteração depois que o app é encerrado.\n\nSe o RXS já estiver ativado na lista, desative e ative novamente. Se ainda não funcionar, remova a entrada antiga e adicione a cópia do RXS que você está usando.",
+                &["Abrir Ajustes e encerrar RXS", "Agora não"],
             );
             if choice == 1000 {
                 open_settings(
                     "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
                 );
+                self.ivars().modal.set(false);
+                NSApplication::sharedApplication(self.mtm()).terminate(None);
+                return false;
             }
         }
         self.ivars().modal.set(false);

@@ -79,7 +79,7 @@ bash scripts/bundle.sh
 open dist/RXS.app
 ```
 
-O pacote fica em `dist/RXS.app`. Para uso diário, mova-o para `/Applications` ou `~/Applications` e abra dessa localização. O script cria uma assinatura ad-hoc para uso local; distribuição pública requer Developer ID e notarização. O script compila para a arquitetura do Mac atual. A validação inicial é em Apple Silicon; Intel ainda precisa de validação própria.
+O pacote fica em `dist/RXS.app`. Para uso diário, mova-o para `/Applications` ou `~/Applications` e abra dessa localização. Por padrão, o script cria uma assinatura ad-hoc para uso local. Como a identidade dessa assinatura muda junto com o executável, o macOS pode pedir novamente permissões de privacidade depois de cada recompilação ou atualização. Para assinar com uma identidade Developer ID disponível no Chaves e preservar a identidade do app entre versões, use `RXS_CODESIGN_IDENTITY="Developer ID Application: Seu Nome (TEAMID)" bash scripts/bundle.sh`. Distribuição pública também requer notarização. O script compila para a arquitetura do Mac atual. A validação inicial é em Apple Silicon; Intel ainda precisa de validação própria.
 
 ## Builds automáticos e releases
 
@@ -115,7 +115,7 @@ Acompanhe a execução em [Actions](https://github.com/pedroaba/rxs/actions/work
 2. Para manter as teclas habituais, abra **Ajustes do Sistema → Teclado → Atalhos de Teclado → Capturas de Tela** e desative as ações do sistema que usam **Command+Shift+3** e **Command+Shift+4**. Preserve **Command+Shift+5**. O RXS não altera essas configurações automaticamente.
 3. No menu do RXS, escolha **Atalhos…**, clique no controle da captura e pressione a combinação desejada. Clique em **Aplicar** para ativar. **Esc** cancela a gravação; **Tab** passa ao próximo controle. Se preferir, use `Command+Option+3` e `Command+Option+4` ou outras combinações com Command e Shift/Option/Control mais uma letra/número.
 4. **Command+Shift+3** captura a tela principal. **Command+Shift+4** abre a seleção nativa: arraste uma região ou pressione espaço para escolher uma janela. **Escape** cancela. As mesmas ações estão no menu, incluindo captura direta de janela.
-5. Se o macOS pedir permissão, autorize o RXS em **Privacidade e Segurança → Gravação de Tela** (o nome pode incluir áudio, conforme a versão do macOS). Se solicitado pelo sistema, feche e abra o app novamente.
+5. Se o macOS pedir permissão, autorize o RXS em **Privacidade e Segurança → Gravação de Tela** (o nome pode incluir áudio, conforme a versão do macOS), encerre o RXS e abra-o novamente. Se a chave já estiver ligada, desligue e ligue outra vez. Em builds ad-hoc atualizados, remova a entrada antiga e adicione a cópia atual do app.
 
 O app verifica conflitos com atalhos do sistema e erros de registro. Ao alterar configurações no macOS, volte a **Atalhos… → Aplicar**. Os atalhos não são ativados antes dessa configuração. O atalho de tela inteira captura o monitor principal; região/janela podem ser selecionadas nos demais monitores. Se você mantiver Control pressionado no seletor nativo, o macOS pode enviar a captura diretamente ao clipboard, sem abrir o editor.
 
