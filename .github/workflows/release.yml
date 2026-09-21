@@ -57,7 +57,7 @@ jobs:
       - name: Package and verify app
         run: |
           test "$(uname -m)" = "$BUILD_ARCH"
-          lipo -verify_arch "$BUILD_ARCH" dist/RXS.app/Contents/MacOS/rxs
+          lipo dist/RXS.app/Contents/MacOS/rxs -verify_arch "$BUILD_ARCH"
           codesign --verify --deep --strict dist/RXS.app
           archive="RXS-${RELEASE_TAG}-macos-${BUILD_ARCH}.zip"
           ditto -c -k --sequesterRsrc --keepParent dist/RXS.app "dist/$archive"
