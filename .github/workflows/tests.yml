@@ -22,8 +22,8 @@ jobs:
           persist-credentials: false
       - name: Install Rust
         run: |
-          rustup toolchain install 1.88.0 --profile minimal --component clippy --component rustfmt
-          rustup default 1.88.0
+          rustup toolchain install 1.95.0 --profile minimal --component clippy --component rustfmt
+          rustup default 1.95.0
       - name: Check formatting
         run: cargo fmt --check
       - name: Lint all macOS targets

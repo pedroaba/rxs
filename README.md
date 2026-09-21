@@ -107,7 +107,7 @@ git push origin v0.1.0
 
 A tag deve corresponder exatamente à versão de `Cargo.toml`; versões com sufixo como `-rc.1` geram uma **pré-release**. Não é necessário configurar secrets: a publicação usa o `GITHUB_TOKEN` automático, com permissão de escrita apenas no job de release. O workflow aceita tags `vMAJOR.MINOR.PATCH` com pré-release opcional, sem metadados `+build`.
 
-Acompanhe a execução em [Actions](https://github.com/pedroaba/rxs/actions/workflows/release.yml). Em caso de falha no upload, a release permanece como rascunho e uma reexecução pode concluí-la. Releases já publicadas não são sobrescritas: publique uma nova tag para uma nova versão. Os builds usam Rust 1.88.0; testes de interface e captura real continuam sujeitos às [validações manuais](validation/README.md).
+Acompanhe a execução em [Actions](https://github.com/pedroaba/rxs/actions/workflows/release.yml). Em caso de falha no upload, a release permanece como rascunho e uma reexecução pode concluí-la. Releases já publicadas não são sobrescritas: publique uma nova tag para uma nova versão. Os builds usam Rust 1.95.0; testes de interface e captura real continuam sujeitos às [validações manuais](validation/README.md).
 
 ## Primeiro uso e captura
 

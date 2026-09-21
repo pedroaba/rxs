@@ -39,8 +39,8 @@ jobs:
 
       - name: Install Rust
         run: |
-          rustup toolchain install 1.88.0 --profile minimal --component clippy --component rustfmt
-          rustup default 1.88.0
+          rustup toolchain install 1.95.0 --profile minimal --component clippy --component rustfmt
+          rustup default 1.95.0
 
       - name: Validate release version
         run: python3 scripts/validate-release.py "$RELEASE_TAG"
