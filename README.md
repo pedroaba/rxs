@@ -64,7 +64,7 @@ RXS fica na barra de menus e abre um editor sob demanda para destacar o que impo
 | Retina / múltiplos monitores | Coordenadas em pixels implementadas; validação física completa pendente |
 | Distribuição | Compilação local com assinatura ad-hoc; sem Developer ID ou notarização |
 
-**Estado do projeto:** versão 0.2.0. Captura real após conceder permissão, disparo dos atalhos globais e alguns fluxos do seletor de cores ainda têm validações manuais pendentes. Consulte o [relatório completo](validation/README.md) para separar o que foi implementado do que já foi testado.
+**Estado do projeto:** versão 0.3.0. Captura real após conceder permissão, disparo dos atalhos globais e alguns fluxos do seletor de cores ainda têm validações manuais pendentes. Consulte o [relatório completo](validation/README.md) para separar o que foi implementado do que já foi testado.
 
 Não estão implementados: gravação de vídeo/GIF, OCR, texto como anotação, blur/pixelização, recorte posterior, sincronização e biblioteca de imagens. O GIF deste README é material de documentação, não uma opção de exportação do app.
 
