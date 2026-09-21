@@ -71,3 +71,13 @@ A ferramenta de interação com a interface retornou timeout ao acessar o RXS. P
 ### Ajuste da coleção de cores
 
 Coleção reorganizada em cinco colunas, com até três linhas visíveis e rolagem vertical sobreposta. A view da coleção agora usa coordenadas a partir do topo, evitando deslocamento e corte das amostras. O botão de adicionar tem a mesma altura visual das amostras. Novas cores são trazidas para a área visível automaticamente. A prévia `target/diagnostics/color-picker-many.png` foi conferida com 23 cores sintéticas, sem modificar a coleção persistida do usuário.
+
+## Cópia automática e gravação visual de atalhos — 20/09/2026
+
+- 12 testes unitários passaram, incluindo conversão de códigos nativos, serialização dos atalhos, duplicidade, combinação reservada e apresentação dos modificadores. Clippy com avisos como erros e verificação de formatação passaram.
+- Diagnóstico nativo com imagem sintética 4K: cópia automática em clipboard privado marca a versão como exportada; anotações voltam a exigir exportação; cópia manual compartilha o mesmo caminho e preserva dimensões, orientação e transparência. A rodada completa de 50 ciclos passou.
+- Interface testada no pacote local: abrir Atalhos com ⌘ vírgula, gravar ⌘⌥3, rejeitar duplicidade na segunda ação, cancelar gravação com Escape e descartar o rascunho com Cancelar. ⌘S abriu o painel de salvar; cancelar manteve o editor. ⌘C apresentou “Imagem copiada”. As preferências de captura existentes foram preservadas.
+- Aparências clara e escura inspecionadas em `target/diagnostics/shortcuts-light.png` e `shortcuts-dark.png`. As imagens usam RGBA de 8 bits para evitar incompatibilidades com bitmaps nativos HDR.
+- Pacote local recompilado em `dist/RXS.app`, com Info.plist e assinatura ad-hoc verificados. Não foi instalado nem publicado.
+
+Continuam pendentes nesta rodada: captura real com permissão de Gravação de Tela, colagem em outro aplicativo, aplicação/persistência de novos atalhos globais com reinício, suspensão/restauração de registros globais em uso e falha real de registro. Esses cenários não são comprovados pelos testes sintéticos ou pela gravação de um rascunho na janela.

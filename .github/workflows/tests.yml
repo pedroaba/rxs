@@ -1,0 +1,33 @@
+name: Automated tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: Tests (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Install Rust
+        run: |
+          rustup toolchain install 1.88.0 --profile minimal --component clippy --component rustfmt
+          rustup default 1.88.0
+      - name: Check formatting
+        run: cargo fmt --check
+      - name: Lint all macOS targets
+        if: runner.os == 'macOS'
+        run: cargo clippy --all-targets --locked -- -D warnings
+      - name: Unit and non-interactive integration tests
+        run: cargo test --locked

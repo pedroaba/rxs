@@ -2,6 +2,7 @@ mod capture;
 mod color_picker;
 mod diagnostics;
 mod editor;
+mod preferences;
 mod render;
 mod shortcuts;
 
@@ -11,7 +12,7 @@ use crate::{
 };
 use capture::{MacCapture, Session};
 use dispatch2::DispatchQueue;
-use editor::{Editor, label};
+use editor::Editor;
 use global_hotkey::{GlobalHotKeyEvent, HotKeyState};
 use objc2::{
     DefinedClass, MainThreadOnly, define_class, msg_send,
@@ -175,14 +176,8 @@ define_class!(
         fn copy_image(&self, _sender: Option<&AnyObject>) {
             if self.ivars().modal.get() { return; }
             let Some(editor) = self.editor() else { return; };
-            let result = autoreleasepool(|_| {
-                let data = editor.canvas.export()?;
-                let pasteboard = NSPasteboard::generalPasteboard();
-                pasteboard.clearContents();
-                if !pasteboard.setData_forType(Some(&data), unsafe { NSPasteboardTypePNG }) { return Err("Não foi possível copiar a imagem.".to_string()); }
-                Ok(())
-            });
-            match result { Ok(()) => { editor.canvas.mark_exported(); editor.refresh(); }, Err(error) => self.show_error("Falha ao copiar", &error) }
+            let result = autoreleasepool(|_| editor.copy_to(&NSPasteboard::generalPasteboard()));
+            if let Err(error) = result { self.show_error("Falha ao copiar", &error); }
         }
         #[unsafe(method(saveImage:))]
         fn save_image(&self, _sender: Option<&AnyObject>) {
@@ -211,35 +206,7 @@ define_class!(
         #[unsafe(method(preferences:))]
         fn preferences(&self, _sender: Option<&AnyObject>) {
             if self.ivars().capturing.get() || self.ivars().modal.replace(true) { return; }
-            let (screen, region) = shortcut_texts();
-            let panel = NSAlert::new(self.mtm());
-            panel.setMessageText(&NSString::from_str("Atalhos de captura"));
-            panel.setInformativeText(&NSString::from_str("Desative os atalhos iguais em Ajustes do Sistema → Teclado → Atalhos de Teclado → Capturas de Tela. O RXS não altera as configurações do macOS.\n\nExemplo alternativo: Command+Option+3 e Command+Option+4. Use letras ou números."));
-            panel.addButtonWithTitle(&NSString::from_str("Aplicar"));
-            panel.addButtonWithTitle(&NSString::from_str("Cancelar"));
-            panel.addButtonWithTitle(&NSString::from_str("Abrir Ajustes"));
-            let content = NSView::initWithFrame(NSView::alloc(self.mtm()), render::rect(0.0, 0.0, 380.0, 108.0));
-            content.addSubview(&label("Tela principal", render::rect(0.0, 80.0, 130.0, 18.0), self.mtm()));
-            content.addSubview(&label("Região / janela", render::rect(0.0, 35.0, 130.0, 18.0), self.mtm()));
-            let screen_field = NSTextField::initWithFrame(NSTextField::alloc(self.mtm()), render::rect(135.0, 76.0, 240.0, 24.0));
-            let region_field = NSTextField::initWithFrame(NSTextField::alloc(self.mtm()), render::rect(135.0, 31.0, 240.0, 24.0));
-            screen_field.setStringValue(&NSString::from_str(&screen)); region_field.setStringValue(&NSString::from_str(&region));
-            content.addSubview(&screen_field); content.addSubview(&region_field); panel.setAccessoryView(Some(&content));
-            activate(self.mtm());
-            loop {
-                let result = panel.runModal();
-                if result == 1002 { open_settings("x-apple.systempreferences:com.apple.Keyboard-Settings.extension"); break; }
-                if result != 1000 { break; }
-                let screen = screen_field.stringValue().to_string(); let region = region_field.stringValue().to_string();
-                match self.configure_shortcuts(&screen, &region) {
-                    Ok(()) => {
-                        let defaults = NSUserDefaults::standardUserDefaults();
-                        unsafe { defaults.setObject_forKey(Some(&NSString::from_str(&screen)), &NSString::from_str("screenShortcut")); defaults.setObject_forKey(Some(&NSString::from_str(&region)), &NSString::from_str("regionShortcut")); }
-                        defaults.setBool_forKey(true, &NSString::from_str("shortcutsEnabled")); break;
-                    },
-                    Err(error) => { alert(self.mtm(), "Não foi possível ativar os atalhos", &error, &["Revisar"]); },
-                }
-            }
+            preferences::show(self);
             self.ivars().modal.set(false);
         }
         #[unsafe(method(quit:))]
@@ -363,7 +330,23 @@ impl App {
                     Ok(editor) => {
                         let editor = Rc::new(editor);
                         *self.ivars().editor.borrow_mut() = Some(editor.clone());
+                        let copied = if self.ivars().diagnostics_mode {
+                            let board = NSPasteboard::pasteboardWithUniqueName();
+                            let result = editor.copy_to(&board);
+                            unsafe {
+                                let _: () = msg_send![&*board, releaseGlobally];
+                            }
+                            result
+                        } else {
+                            editor.copy_to(&NSPasteboard::generalPasteboard())
+                        };
                         editor.show();
+                        if let Err(error) = copied {
+                            self.show_error(
+                                "Captura aberta, mas não copiada",
+                                &format!("{error} Tente novamente pelo botão Copiar."),
+                            );
+                        }
                     }
                     Err(error) => self.show_error("Falha ao abrir captura", &error),
                 }

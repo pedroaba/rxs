@@ -39,6 +39,21 @@ define_class!(
     }
 );
 
+// Window fallback keeps copy available when toolbar controls own keyboard focus.
+// Text fields handle copy first through the normal responder chain.
+define_class!(
+    #[unsafe(super(NSWindow))]
+    #[thread_kind = MainThreadOnly]
+    struct EditorWindow;
+    unsafe impl NSObjectProtocol for EditorWindow {}
+    impl EditorWindow {
+        #[unsafe(method(copy:))]
+        fn copy(&self, _sender: Option<&objc2::runtime::AnyObject>) {
+            super::with_app(|app| app.copy_image(sel!(copyImage:), None));
+        }
+    }
+);
+
 pub struct CanvasIvars {
     pub image: NativeImage,
     pub document: RefCell<Document>,
@@ -222,16 +237,8 @@ impl Editor {
         let image = NativeImage::load(&artifact.path)?;
         let canvas = Canvas::new(mtm, image, artifact);
         let window = unsafe {
-            NSWindow::initWithContentRect_styleMask_backing_defer(
-                NSWindow::alloc(mtm),
-                rect(0.0, 0.0, 1040.0, 700.0),
-                NSWindowStyleMask::Titled
-                    | NSWindowStyleMask::Closable
-                    | NSWindowStyleMask::Miniaturizable
-                    | NSWindowStyleMask::Resizable,
-                NSBackingStoreType::Buffered,
-                false,
-            )
+            let window: Retained<EditorWindow> = msg_send![EditorWindow::alloc(mtm), initWithContentRect: rect(0.0, 0.0, 1040.0, 700.0), styleMask: NSWindowStyleMask::Titled | NSWindowStyleMask::Closable | NSWindowStyleMask::Miniaturizable | NSWindowStyleMask::Resizable, backing: NSBackingStoreType::Buffered, defer: false];
+            Retained::into_super(window)
         };
         unsafe {
             window.setReleasedWhenClosed(false);
@@ -301,17 +308,21 @@ impl Editor {
         toolbar.addSubview(&undo);
         toolbar.addSubview(&redo);
         let copy = button(
-            "Copiar",
+            "Copiar ⌘C",
             app,
             sel!(copyImage:),
-            rect(818.0, 15.0, 96.0, 28.0),
+            rect(776.0, 15.0, 120.0, 28.0),
         );
         let save = button(
-            "Salvar PNG…",
+            "Salvar ⌘S",
             app,
             sel!(saveImage:),
-            rect(917.0, 15.0, 111.0, 28.0),
+            rect(904.0, 15.0, 124.0, 28.0),
         );
+        copy.setToolTip(Some(&NSString::from_str(
+            "Copiar imagem com anotações (⌘C)",
+        )));
+        save.setToolTip(Some(&NSString::from_str("Salvar imagem em PNG… (⌘S)")));
         for b in [&copy, &save] {
             b.setAutoresizingMask(NSAutoresizingMaskOptions::ViewMinXMargin);
             toolbar.addSubview(b);
@@ -478,6 +489,19 @@ impl Editor {
         self.canvas.set_zoom(zoom.clamp(0.05, 4.0));
         self.center_image();
         self.refresh();
+    }
+    pub fn copy_to(&self, pasteboard: &NSPasteboard) -> Result<(), String> {
+        let data = self.canvas.export()?;
+        pasteboard.clearContents();
+        if !pasteboard.setData_forType(Some(&data), unsafe { NSPasteboardTypePNG }) {
+            return Err("Não foi possível copiar a imagem.".into());
+        }
+        self.canvas.mark_exported();
+        self.refresh();
+        self.status.setStringValue(&NSString::from_str(
+            "Imagem copiada · ⌘C copia novamente com suas edições",
+        ));
+        Ok(())
     }
     pub fn refresh(&self) {
         let doc = self.canvas.ivars().document.borrow();

@@ -64,7 +64,7 @@ RXS fica na barra de menus e abre um editor sob demanda para destacar o que impo
 | Retina / múltiplos monitores | Coordenadas em pixels implementadas; validação física completa pendente |
 | Distribuição | Compilação local com assinatura ad-hoc; sem Developer ID ou notarização |
 
-**Estado do projeto:** versão inicial 0.1.0. Captura real após conceder permissão, disparo dos atalhos globais e alguns fluxos do seletor de cores ainda têm validações manuais pendentes. Consulte o [relatório completo](validation/README.md) para separar o que foi implementado do que já foi testado.
+**Estado do projeto:** versão 0.2.0. Captura real após conceder permissão, disparo dos atalhos globais e alguns fluxos do seletor de cores ainda têm validações manuais pendentes. Consulte o [relatório completo](validation/README.md) para separar o que foi implementado do que já foi testado.
 
 Não estão implementados: gravação de vídeo/GIF, OCR, texto como anotação, blur/pixelização, recorte posterior, sincronização e biblioteca de imagens. O GIF deste README é material de documentação, não uma opção de exportação do app.
 
@@ -113,11 +113,15 @@ Acompanhe a execução em [Actions](https://github.com/pedroaba/rxs/actions/work
 
 1. Abra o RXS e encontre o ícone de enquadramento na barra de menus.
 2. Para manter as teclas habituais, abra **Ajustes do Sistema → Teclado → Atalhos de Teclado → Capturas de Tela** e desative as ações do sistema que usam **Command+Shift+3** e **Command+Shift+4**. Preserve **Command+Shift+5**. O RXS não altera essas configurações automaticamente.
-3. No menu do RXS, escolha **Atalhos…** e aplique essas combinações. Se preferir, use `Command+Option+3` e `Command+Option+4` ou outras combinações com Command e Shift/Option/Control mais uma letra/número.
+3. No menu do RXS, escolha **Atalhos…**, clique no controle da captura e pressione a combinação desejada. Clique em **Aplicar** para ativar. **Esc** cancela a gravação; **Tab** passa ao próximo controle. Se preferir, use `Command+Option+3` e `Command+Option+4` ou outras combinações com Command e Shift/Option/Control mais uma letra/número.
 4. **Command+Shift+3** captura a tela principal. **Command+Shift+4** abre a seleção nativa: arraste uma região ou pressione espaço para escolher uma janela. **Escape** cancela. As mesmas ações estão no menu, incluindo captura direta de janela.
 5. Se o macOS pedir permissão, autorize o RXS em **Privacidade e Segurança → Gravação de Tela** (o nome pode incluir áudio, conforme a versão do macOS). Se solicitado pelo sistema, feche e abra o app novamente.
 
 O app verifica conflitos com atalhos do sistema e erros de registro. Ao alterar configurações no macOS, volte a **Atalhos… → Aplicar**. Os atalhos não são ativados antes dessa configuração. O atalho de tela inteira captura o monitor principal; região/janela podem ser selecionadas nos demais monitores. Se você mantiver Control pressionado no seletor nativo, o macOS pode enviar a captura diretamente ao clipboard, sem abrir o editor.
+
+Toda captura concluída pelo RXS é copiada automaticamente em PNG e aberta no editor. O aviso **Imagem copiada** confirma o sucesso; depois de anotar, use **Copiar ⌘C** para atualizar o clipboard. Cancelar a captura não altera o clipboard.
+
+Na janela de atalhos, conflitos aparecem junto ao controle. Os atalhos do RXS ficam temporariamente pausados enquanto você grava uma combinação; **Cancelar** mantém a configuração anterior. Os atalhos **⌘C** e **⌘S** do editor são fixos.
 
 ## Atalhos em um relance
 
@@ -163,7 +167,7 @@ bash scripts/bundle.sh
 dist/RXS.app/Contents/MacOS/rxs --diagnostics
 ```
 
-Feche outra instância do RXS antes do diagnóstico. O modo `--diagnostics` gera uma imagem sintética 4K, valida orientação, transparência, coordenadas das anotações e roundtrip PNG em um clipboard privado. Abre/exporta/fecha o editor 50 vezes e termina. Não captura sua tela, altera atalhos nem substitui o clipboard normal. Os arquivos ficam em `target/diagnostics/`; personalize com `RXS_DIAGNOSTICS_DIR`.
+Feche outra instância do RXS antes do diagnóstico. O modo `--diagnostics` gera uma imagem sintética 4K, valida orientação, transparência, coordenadas das anotações e roundtrip PNG em um clipboard privado. Também verifica a cópia automática e o estado de exportação, exercita o cancelamento da gravação de atalhos e gera imagens da janela de atalhos nas aparências clara e escura. Abre/exporta/fecha o editor 50 vezes e termina. Não captura sua tela, altera atalhos nem substitui o clipboard normal. Os arquivos ficam em `target/diagnostics/`; personalize com `RXS_DIAGNOSTICS_DIR`.
 
 `--demo` abre uma imagem sintética no editor para inspeção manual, sem configurar atalhos. Este modo não cria uma captura real.
 

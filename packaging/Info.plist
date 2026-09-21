@@ -5,8 +5,8 @@
     <key>CFBundleName</key><string>RXS</string>
     <key>CFBundleDisplayName</key><string>RXS</string>
     <key>CFBundleIdentifier</key><string>app.rxs.capture</string>
-    <key>CFBundleVersion</key><string>1</string>
-    <key>CFBundleShortVersionString</key><string>0.1.0</string>
+    <key>CFBundleVersion</key><string>2</string>
+    <key>CFBundleShortVersionString</key><string>0.2.0</string>
     <key>CFBundleExecutable</key><string>rxs</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleIconFile</key><string>RXS</string>

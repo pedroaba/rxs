@@ -8,6 +8,7 @@ use objc2_foundation::{NSArray, NSDictionary, NSString};
 pub struct Shortcuts {
     manager: GlobalHotKeyManager,
     pub active: Vec<HotKey>,
+    suspended: Vec<HotKey>,
 }
 
 #[link(name = "Carbon", kind = "framework")]
@@ -58,6 +59,91 @@ fn keycode(key: Code) -> Option<u32> {
     })
 }
 
+pub fn from_keycode(code: u16, mods: Modifiers) -> Result<HotKey, String> {
+    let keys = [
+        Code::KeyA,
+        Code::KeyB,
+        Code::KeyC,
+        Code::KeyD,
+        Code::KeyE,
+        Code::KeyF,
+        Code::KeyG,
+        Code::KeyH,
+        Code::KeyI,
+        Code::KeyJ,
+        Code::KeyK,
+        Code::KeyL,
+        Code::KeyM,
+        Code::KeyN,
+        Code::KeyO,
+        Code::KeyP,
+        Code::KeyQ,
+        Code::KeyR,
+        Code::KeyS,
+        Code::KeyT,
+        Code::KeyU,
+        Code::KeyV,
+        Code::KeyW,
+        Code::KeyX,
+        Code::KeyY,
+        Code::KeyZ,
+        Code::Digit0,
+        Code::Digit1,
+        Code::Digit2,
+        Code::Digit3,
+        Code::Digit4,
+        Code::Digit5,
+        Code::Digit6,
+        Code::Digit7,
+        Code::Digit8,
+        Code::Digit9,
+    ];
+    let key = keys
+        .into_iter()
+        .find(|key| keycode(*key) == Some(code.into()))
+        .ok_or("Use uma letra ou número com os modificadores indicados.")?;
+    parse(&canonical(HotKey::new(Some(mods), key)))
+}
+pub fn canonical(key: HotKey) -> String {
+    let mut parts = Vec::new();
+    for (flag, text) in [
+        (Modifiers::SUPER, "Command"),
+        (Modifiers::CONTROL, "Control"),
+        (Modifiers::ALT, "Option"),
+        (Modifiers::SHIFT, "Shift"),
+    ] {
+        if key.mods.contains(flag) {
+            parts.push(text.to_string());
+        }
+    }
+    let key_name = key.key.to_string();
+    parts.push(
+        key_name
+            .trim_start_matches("Key")
+            .trim_start_matches("Digit")
+            .to_string(),
+    );
+    parts.join("+")
+}
+pub fn symbols(text: &str) -> String {
+    let normalized = parse(text)
+        .map(canonical)
+        .unwrap_or_else(|_| text.to_string());
+    normalized
+        .replace("Command", "⌘")
+        .replace("Control", "⌃")
+        .replace("Option", "⌥")
+        .replace("Shift", "⇧")
+        .replace('+', " ")
+}
+pub fn validate_pair(screen: &str, region: &str) -> Result<[HotKey; 2], String> {
+    let proposed = [parse(screen)?, parse(region)?];
+    if proposed[0] == proposed[1] {
+        return Err("Escolha atalhos diferentes para tela inteira e seleção.".into());
+    }
+    Ok(proposed)
+}
+
 pub fn parse(text: &str) -> Result<HotKey, String> {
     let hotkey: HotKey = text
         .parse()
@@ -76,7 +162,7 @@ pub fn parse(text: &str) -> Result<HotKey, String> {
     Ok(hotkey)
 }
 
-fn system_conflict(hotkey: HotKey) -> Result<bool, String> {
+pub(super) fn system_conflict(hotkey: HotKey) -> Result<bool, String> {
     let mut raw = std::ptr::null_mut();
     // Copy follows the CF create rule. NSArray is toll-free bridged to CFArray.
     if unsafe { CopySymbolicHotKeys(&mut raw) } != 0 {
@@ -121,13 +207,40 @@ impl Shortcuts {
         Ok(Self {
             manager: GlobalHotKeyManager::new().map_err(|e| e.to_string())?,
             active: vec![],
+            suspended: vec![],
         })
     }
-    pub fn configure(&mut self, screen: &str, region: &str) -> Result<(), String> {
-        let proposed = [parse(screen)?, parse(region)?];
-        if proposed[0] == proposed[1] {
-            return Err("Escolha atalhos diferentes para tela inteira e seleção.".into());
+    pub fn suspend(&mut self) -> Result<(), String> {
+        while let Some(key) = self.active.last().copied() {
+            if let Err(error) = self.manager.unregister(key) {
+                let recovery = self.resume();
+                return Err(format!(
+                    "Não foi possível pausar os atalhos: {error}. {}",
+                    recovery.err().unwrap_or_default()
+                ));
+            }
+            self.active.pop();
+            self.suspended.insert(0, key);
         }
+        Ok(())
+    }
+    pub fn resume(&mut self) -> Result<(), String> {
+        let pending = std::mem::take(&mut self.suspended);
+        for key in pending {
+            if let Err(error) = self.manager.register(key) {
+                for registered in self.active.drain(..) {
+                    let _ = self.manager.unregister(registered);
+                }
+                return Err(format!(
+                    "Não foi possível restaurar os atalhos: {error}. Aplique a configuração novamente."
+                ));
+            }
+            self.active.push(key);
+        }
+        Ok(())
+    }
+    pub fn configure(&mut self, screen: &str, region: &str) -> Result<(), String> {
+        let proposed = validate_pair(screen, region)?;
         for (key, text) in proposed.iter().zip([screen, region]) {
             if system_conflict(*key)? {
                 return Err(format!(
@@ -136,10 +249,8 @@ impl Shortcuts {
             }
         }
         let old = self.active.clone();
-        for key in &old {
-            self.manager.unregister(*key).map_err(|e| e.to_string())?;
-        }
-        self.active.clear();
+        self.suspend()?;
+        self.suspended.clear();
         for key in proposed {
             if let Err(error) = self.manager.register(key) {
                 for registered in self.active.drain(..) {
@@ -177,6 +288,28 @@ impl Shortcuts {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn native_keys_roundtrip_and_ignore_unsupported_keys() {
+        for code in 0..128 {
+            if let Ok(key) = from_keycode(code, Modifiers::SUPER | Modifiers::ALT) {
+                assert_eq!(parse(&canonical(key)).unwrap(), key);
+                assert_eq!(keycode(key.key), Some(code.into()));
+            }
+        }
+        assert_eq!(
+            canonical(from_keycode(20, Modifiers::SUPER | Modifiers::ALT).unwrap()),
+            "Command+Option+3"
+        );
+        assert!(from_keycode(53, Modifiers::SUPER | Modifiers::ALT).is_err());
+        assert!(from_keycode(0, Modifiers::SUPER).is_err());
+        assert!(from_keycode(23, Modifiers::SUPER | Modifiers::SHIFT).is_err());
+    }
+    #[test]
+    fn duplicates_and_display() {
+        assert!(validate_pair("Command+Option+3", "Command+Option+3").is_err());
+        assert!(validate_pair("Command+Option+3", "Command+Option+4").is_ok());
+        assert_eq!(symbols("Command+Shift+3"), "⌘ ⇧ 3");
+    }
     #[test]
     fn preserve_system_toolbar_and_require_modified_shortcuts() {
         assert!(parse("Command+Shift+5").is_err());

@@ -202,7 +202,8 @@ fn verify(editor: &Editor, output: &std::path::Path) -> Result<(), String> {
     // Test clipboard serialization using a private pasteboard, leaving the
     // user's general clipboard intact. The editor uses these same PNG bytes.
     let pasteboard = NSPasteboard::pasteboardWithUniqueName();
-    assert!(pasteboard.setData_forType(Some(&png), unsafe { NSPasteboardTypePNG }));
+    editor.copy_to(&pasteboard)?;
+    assert!(!editor.canvas.needs_export());
     let readback = pasteboard
         .dataForType(unsafe { NSPasteboardTypePNG })
         .ok_or("clipboard readback failed")?;
@@ -227,6 +228,7 @@ pub fn run(app: &App, demo: bool) {
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("target/diagnostics"));
     fs::create_dir_all(&output).expect("create diagnostics output");
+    super::preferences::verify(app, &output);
     let fixture = autoreleasepool(|_| fixture(app)).expect("create 4K fixture");
     let fixture_path = output.join("source-4k.png");
     fs::copy(&fixture.path, &fixture_path).expect("save fixture");
@@ -266,7 +268,15 @@ fn cycle(index: usize, mut rows: Vec<String>, output: PathBuf, source: PathBuf) 
             let artifact = copy_fixture(app, &source);
             app.finish_capture(CaptureOutcome::Success(artifact));
             let editor = app.editor().unwrap();
+            assert!(
+                !editor.canvas.needs_export(),
+                "capture must already be copied"
+            );
             annotate(&editor);
+            assert!(
+                editor.canvas.needs_export(),
+                "annotations require a new export"
+            );
             editor.window.displayIfNeeded();
         })
     });
