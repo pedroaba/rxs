@@ -199,6 +199,15 @@ pub struct Editor {
     color_picker: ColorPicker,
     color_button: Retained<NSButton>,
     pub fit: Cell<bool>,
+    toolbar: Retained<NSView>,
+    header: Retained<NSView>,
+    board: Retained<NSView>,
+    tools: Retained<NSSegmentedControl>,
+    width: Retained<NSPopUpButton>,
+    copy: Retained<NSButton>,
+    save: Retained<NSButton>,
+    metrics: Retained<NSTextField>,
+    feedback: RefCell<String>,
 }
 
 pub fn button(
@@ -207,24 +216,16 @@ pub fn button(
     action: objc2::runtime::Sel,
     frame: NSRect,
 ) -> Retained<NSButton> {
-    let button = unsafe {
-        NSButton::buttonWithTitle_target_action(
-            &NSString::from_str(title),
-            Some(target),
-            Some(action),
-            target.mtm(),
-        )
-    };
+    let button = super::ui::button(target.mtm(), title, target, action, frame);
     button.setFrame(frame);
-    button.setBezelStyle(NSBezelStyle::Push);
+    super::ui::style_button(&button);
     button
 }
 
 pub fn label(text: &str, frame: NSRect, mtm: MainThreadMarker) -> Retained<NSTextField> {
     let label = NSTextField::labelWithString(&NSString::from_str(text), mtm);
     label.setFrame(frame);
-    label.setFont(Some(&NSFont::systemFontOfSize(12.0)));
-    label.setTextColor(Some(&NSColor::secondaryLabelColor()));
+    super::ui::secondary_label(&label);
     label
 }
 
@@ -248,33 +249,40 @@ impl Editor {
         };
         unsafe {
             window.setReleasedWhenClosed(false);
-            window.setContentMinSize(NSSize::new(900.0, 450.0));
+            window.setContentMinSize(NSSize::new(760.0, 450.0));
         }
         window.setTitle(&NSString::from_str("RSX — Anotar captura"));
         window.setDelegate(Some(objc2::runtime::ProtocolObject::from_ref(app)));
         window.center();
-        let content = window.contentView().unwrap();
+        let content = super::ui::ChromeView::create(mtm, rect(0.0, 0.0, 1040.0, 700.0));
+        window.setContentView(Some(&content));
 
-        let toolbar = NSView::initWithFrame(NSView::alloc(mtm), rect(0.0, 644.0, 1040.0, 56.0));
+        let toolbar = super::ui::ChromeView::create(mtm, rect(0.0, 644.0, 1040.0, 56.0));
         toolbar.setAutoresizingMask(
             NSAutoresizingMaskOptions::ViewWidthSizable | NSAutoresizingMaskOptions::ViewMinYMargin,
         );
         content.addSubview(&toolbar);
-        let tools = unsafe {
-            NSSegmentedControl::segmentedControlWithLabels_trackingMode_target_action(
-                &objc2_foundation::NSArray::from_retained_slice(&[
-                    NSString::from_str("Seta"),
-                    NSString::from_str("Retângulo"),
-                    NSString::from_str("Livre"),
-                ]),
-                NSSegmentSwitchTracking::SelectOne,
-                Some(app),
-                Some(sel!(selectTool:)),
-                mtm,
-            )
-        };
+        let header = super::ui::ChromeView::create(mtm, rect(0.0, 636.0, 1040.0, 64.0));
+        content.addSubview(&header);
+        let brand = label("RSX", rect(24.0, 22.0, 48.0, 24.0), mtm);
+        brand.setFont(Some(&NSFont::boldSystemFontOfSize(18.0)));
+        brand.setTextColor(Some(&super::ui::color(super::ui::Role::Text)));
+        header.addSubview(&brand);
+        let heading = label("Editor de captura", rect(88.0, 23.0, 240.0, 22.0), mtm);
+        heading.setFont(Some(&NSFont::systemFontOfSize(15.0)));
+        heading.setTextColor(Some(&super::ui::color(super::ui::Role::Text)));
+        header.addSubview(&heading);
+        let tools = super::ui::segments(
+            mtm,
+            &["Seta", "Retângulo", "Livre"],
+            app,
+            sel!(selectTool:),
+            rect(16.0, 12.0, 224.0, 36.0),
+        );
         tools.setFrame(rect(12.0, 15.0, 230.0, 28.0));
         tools.setSelectedSegment(0);
+        tools.setFont(Some(&NSFont::systemFontOfSize(super::ui::BODY)));
+        tools.setAccessibilityLabel(Some(&NSString::from_str("Ferramenta de anotação")));
         toolbar.addSubview(&tools);
         let color = button(
             "Cor",
@@ -282,13 +290,10 @@ impl Editor {
             sel!(toggleColors:),
             rect(250.0, 15.0, 52.0, 27.0),
         );
+        color.setAccessibilityLabel(Some(&NSString::from_str("Cor do traço")));
         color.setToolTip(Some(&NSString::from_str("Escolher cor do desenho")));
         toolbar.addSubview(&color);
-        let width = NSPopUpButton::initWithFrame_pullsDown(
-            NSPopUpButton::alloc(mtm),
-            rect(306.0, 15.0, 85.0, 27.0),
-            false,
-        );
+        let width = super::ui::select(mtm, rect(332.0, 12.0, 84.0, 36.0));
         for title in ["2 px", "4 px", "8 px", "12 px"] {
             width.addItemWithTitle(&NSString::from_str(title));
         }
@@ -297,6 +302,7 @@ impl Editor {
             width.setTarget(Some(app));
             width.setAction(Some(sel!(changeWidth:)));
         }
+        width.setAccessibilityLabel(Some(&NSString::from_str("Espessura do traço em pixels")));
         width.setToolTip(Some(&NSString::from_str("Espessura em pixels da imagem")));
         toolbar.addSubview(&width);
         let undo = button(
@@ -320,7 +326,7 @@ impl Editor {
             rect(776.0, 15.0, 120.0, 28.0),
         );
         let save = button(
-            "Salvar ⌘S",
+            "Salvar PNG…",
             app,
             sel!(saveImage:),
             rect(904.0, 15.0, 124.0, 28.0),
@@ -329,9 +335,10 @@ impl Editor {
             "Copiar imagem com anotações (⌘C)",
         )));
         save.setToolTip(Some(&NSString::from_str("Salvar imagem em PNG… (⌘S)")));
+        super::ui::primary(&copy);
         for b in [&copy, &save] {
             b.setAutoresizingMask(NSAutoresizingMaskOptions::ViewMinXMargin);
-            toolbar.addSubview(b);
+            header.addSubview(b);
         }
 
         let scroll =
@@ -344,22 +351,46 @@ impl Editor {
         scroll.setHasHorizontalScroller(true);
         scroll.setAutohidesScrollers(true);
         scroll.setDrawsBackground(true);
-        scroll.setBackgroundColor(&NSColor::underPageBackgroundColor());
+        scroll.setBackgroundColor(&super::ui::color(super::ui::Role::Surface));
         let clip: Retained<CenteredClipView> =
             unsafe { msg_send![CenteredClipView::alloc(mtm), initWithFrame: scroll.bounds()] };
+        clip.setBackgroundColor(&super::ui::color(super::ui::Role::Surface));
         scroll.setContentView(&clip);
         scroll.setDocumentView(Some(&canvas));
+        let board = super::ui::SurfaceView::create(mtm, rect(16.0, 56.0, 1008.0, 516.0));
+        content.addSubview(&board);
         content.addSubview(&scroll);
         let minus = button("−", app, sel!(zoomOut:), rect(10.0, 8.0, 32.0, 27.0));
         let plus = button("+", app, sel!(zoomIn:), rect(43.0, 8.0, 32.0, 27.0));
         let fit_button = button("Ajustar", app, sel!(fitImage:), rect(81.0, 8.0, 75.0, 27.0));
         let actual = button("100%", app, sel!(actualSize:), rect(157.0, 8.0, 65.0, 27.0));
+        minus.setAccessibilityLabel(Some(&NSString::from_str("Diminuir zoom")));
+        plus.setAccessibilityLabel(Some(&NSString::from_str("Aumentar zoom")));
+        undo.setToolTip(Some(&NSString::from_str("Desfazer (⌘Z)")));
+        redo.setToolTip(Some(&NSString::from_str("Refazer (⌘⇧Z)")));
         for b in [&minus, &plus, &fit_button, &actual] {
             content.addSubview(b);
         }
-        let status = label("", rect(236.0, 12.0, 790.0, 18.0), mtm);
+        let metrics = label("", rect(236.0, 12.0, 220.0, 20.0), mtm);
+        content.addSubview(&metrics);
+        let status = label("", rect(460.0, 12.0, 564.0, 20.0), mtm);
         status.setAutoresizingMask(NSAutoresizingMaskOptions::ViewWidthSizable);
         content.addSubview(&status);
+        // Explicit tab order follows the visual groups even in the two-row layout.
+        unsafe {
+            tools.setNextKeyView(Some(&color));
+            color.setNextKeyView(Some(&width));
+            width.setNextKeyView(Some(&undo));
+            undo.setNextKeyView(Some(&redo));
+            redo.setNextKeyView(Some(&copy));
+            copy.setNextKeyView(Some(&save));
+            save.setNextKeyView(Some(&minus));
+            minus.setNextKeyView(Some(&plus));
+            plus.setNextKeyView(Some(&fit_button));
+            fit_button.setNextKeyView(Some(&actual));
+            actual.setNextKeyView(Some(&canvas));
+            canvas.setNextKeyView(Some(&tools));
+        }
         let weak_canvas = objc2::rc::Weak::new(&*canvas);
         let color_button = color.clone();
         let color_picker = ColorPicker::new(
@@ -368,19 +399,17 @@ impl Editor {
             move |rgba| {
                 if let Some(canvas) = weak_canvas.load() {
                     canvas.ivars().document.borrow_mut().style.color = rgba;
-                    color_button.setContentTintColor(Some(
-                        &NSColor::colorWithSRGBRed_green_blue_alpha(
-                            rgba[0], rgba[1], rgba[2], rgba[3],
-                        ),
-                    ));
+                    let image = super::color_picker::swatch(rgba);
+                    image.setSize(NSSize::new(12.0, 12.0));
+                    color_button.setImage(Some(&image));
                 }
             },
         );
-        color.setTitle(&NSString::from_str("● ▾"));
-        let [r, g, b, a] = canvas.ivars().document.borrow().style.color;
-        color.setContentTintColor(Some(&NSColor::colorWithSRGBRed_green_blue_alpha(
-            r, g, b, a,
-        )));
+        color.setTitle(&NSString::from_str("Cor"));
+        color.setImagePosition(NSCellImagePosition::ImageLeft);
+        let image = super::color_picker::swatch(canvas.ivars().document.borrow().style.color);
+        image.setSize(NSSize::new(12.0, 12.0));
+        color.setImage(Some(&image));
         let editor = Self {
             window,
             canvas,
@@ -391,10 +420,65 @@ impl Editor {
             color_picker,
             color_button: color,
             fit: Cell::new(true),
+            toolbar,
+            header,
+            board,
+            tools,
+            width,
+            copy,
+            save,
+            metrics,
+            feedback: RefCell::new(String::new()),
         };
+        editor.layout();
         editor.fit_image();
         editor.refresh();
         Ok(editor)
+    }
+    /// Lay out groups rather than shrinking controls when the window gets narrow.
+    pub fn layout(&self) {
+        let size = self.window.contentView().unwrap().bounds().size;
+        let narrow = size.width < 960.0;
+        let height = if narrow { 104.0 } else { 64.0 };
+        let y = if narrow { 56.0 } else { 16.0 };
+        self.toolbar
+            .setFrame(rect(0.0, size.height - 64.0 - height, size.width, height));
+        self.header
+            .setFrame(rect(0.0, size.height - 64.0, size.width, 64.0));
+        self.tools.setFrame(rect(super::ui::SPACE, y, 248.0, 36.0));
+        for segment in 0..3 {
+            self.tools.setWidth_forSegment(248.0 / 3.0, segment);
+        }
+        self.color_button.setFrame(rect(280.0, y, 80.0, 36.0));
+        self.width.setFrame(rect(372.0, y, 88.0, 36.0));
+        let history_y = if narrow { 12.0 } else { y };
+        let history_x = if narrow { 16.0 } else { size.width - 196.0 };
+        self.undo.setFrame(rect(history_x, history_y, 88.0, 36.0));
+        self.redo
+            .setFrame(rect(history_x + 96.0, history_y, 80.0, 36.0));
+        self.copy
+            .setFrame(rect(size.width - 280.0, 16.0, 120.0, 36.0));
+        self.save
+            .setFrame(rect(size.width - 148.0, 16.0, 124.0, 36.0));
+        self.scroll.setFrame(rect(
+            24.0,
+            64.0,
+            size.width - 48.0,
+            size.height - height - 144.0,
+        ));
+        self.board.setFrame(rect(
+            16.0,
+            56.0,
+            size.width - 32.0,
+            size.height - height - 128.0,
+        ));
+        self.metrics.setFrame(rect(236.0, 14.0, 196.0, 20.0));
+        self.status
+            .setFrame(rect(440.0, 14.0, size.width - 456.0, 20.0));
+    }
+    pub fn export_feedback(&self, message: &str) {
+        *self.feedback.borrow_mut() = message.into();
+        self.refresh();
     }
     pub(super) fn color_picker_many_snapshot(&self) -> Option<Retained<NSBitmapImageRep>> {
         self.color_picker.snapshot_many_colors()
@@ -402,7 +486,81 @@ impl Editor {
     pub(super) fn color_picker_snapshot(&self) -> Option<Retained<NSBitmapImageRep>> {
         self.color_picker.snapshot()
     }
+    pub(super) fn snapshots(&self, output: &std::path::Path) -> Result<(), String> {
+        let original_size = self.window.contentView().unwrap().bounds().size;
+        let original_appearance = self.window.appearance();
+        for (theme, appearance) in [
+            ("light", unsafe { NSAppearanceNameAqua }),
+            ("dark", unsafe { NSAppearanceNameDarkAqua }),
+        ] {
+            self.window
+                .setAppearance(NSAppearance::appearanceNamed(appearance).as_deref());
+            for (name, size) in [
+                ("standard", NSSize::new(1040.0, 700.0)),
+                ("compact", NSSize::new(760.0, 450.0)),
+            ] {
+                self.window.setContentSize(size);
+                self.layout();
+                self.fit_image();
+                self.window.displayIfNeeded();
+                let content = self.window.contentView().unwrap();
+                content.display();
+                let bitmap = render::new_bitmap(size.width as usize, size.height as usize)?;
+                content.cacheDisplayInRect_toBitmapImageRep(content.bounds(), &bitmap);
+                let png = render::png(&bitmap)?;
+                std::fs::write(output.join(format!("editor-{theme}-{name}.png")), unsafe {
+                    png.as_bytes_unchecked()
+                })
+                .map_err(|e| e.to_string())?;
+            }
+            self.toggle_colors();
+            if let Some(bitmap) = self.color_picker_snapshot() {
+                let png = render::png(&bitmap)?;
+                std::fs::write(output.join(format!("color-picker-{theme}.png")), unsafe {
+                    png.as_bytes_unchecked()
+                })
+                .map_err(|e| e.to_string())?;
+            }
+            self.toggle_colors();
+        }
+        self.window.setAppearance(original_appearance.as_deref());
+        self.window.setContentSize(original_size);
+        self.layout();
+        self.fit_image();
+        Ok(())
+    }
     pub(super) fn verify_editor_layout(&self) {
+        // Dispatch through the actual custom controls, without touching the general clipboard.
+        let original = self.canvas.ivars().document.borrow().annotations().count();
+        if self.undo.isEnabled() {
+            unsafe {
+                self.undo.performClick(None);
+            }
+            assert!(self.redo.isEnabled());
+            unsafe {
+                self.redo.performClick(None);
+            }
+            assert_eq!(
+                self.canvas.ivars().document.borrow().annotations().count(),
+                original
+            );
+        }
+        self.tools.setSelectedSegment(1);
+        unsafe {
+            assert!(
+                self.tools
+                    .sendAction_to(self.tools.action(), self.tools.target().as_deref())
+            );
+        }
+        assert_eq!(self.canvas.ivars().document.borrow().tool, Tool::Rectangle);
+        self.tools.setSelectedSegment(0);
+        unsafe {
+            assert!(
+                self.tools
+                    .sendAction_to(self.tools.action(), self.tools.target().as_deref())
+            );
+        }
+
         let assert_centered = || {
             let bounds = self.scroll.contentView().bounds();
             let image = self.canvas.frame();
@@ -417,6 +575,39 @@ impl Editor {
                 );
             }
         };
+        let original_size = self.window.contentView().unwrap().bounds().size;
+        for width in [760.0, 959.0, 960.0, 1040.0, 1440.0] {
+            self.window.setContentSize(NSSize::new(width, 450.0));
+            self.layout();
+            self.fit_image();
+            let expected = if width < 960.0 { 104.0 } else { 64.0 };
+            assert_eq!(self.toolbar.frame().size.height, expected);
+            let controls: [&NSView; 5] = [
+                &self.tools,
+                &self.color_button,
+                &self.width,
+                &self.undo,
+                &self.redo,
+            ];
+            for (i, control) in controls.iter().enumerate() {
+                let frame = control.frame();
+                assert!(frame.origin.x >= 0.0 && frame.origin.x + frame.size.width <= width);
+                for other in &controls[i + 1..] {
+                    let other = other.frame();
+                    assert!(
+                        !(frame.origin.x < other.origin.x + other.size.width
+                            && frame.origin.x + frame.size.width > other.origin.x
+                            && frame.origin.y < other.origin.y + other.size.height
+                            && frame.origin.y + frame.size.height > other.origin.y),
+                        "toolbar controls overlap"
+                    );
+                }
+            }
+            assert_centered();
+        }
+        self.window.setContentSize(original_size);
+        self.layout();
+        self.fit_image();
         assert_centered();
         for zoom in [0.1, 0.25, 1.0] {
             self.set_zoom(zoom);
@@ -505,10 +696,7 @@ impl Editor {
             return Err("Não foi possível copiar a imagem.".into());
         }
         self.canvas.mark_exported();
-        self.refresh();
-        self.status.setStringValue(&NSString::from_str(
-            "Imagem copiada · ⌘C copia novamente com suas edições",
-        ));
+        self.export_feedback("Imagem copiada");
         tracing::info!("clipboard.copied");
         Ok(())
     }
@@ -516,17 +704,24 @@ impl Editor {
         let doc = self.canvas.ivars().document.borrow();
         self.undo.setEnabled(doc.can_undo());
         self.redo.setEnabled(doc.can_redo());
+        if doc.needs_export() {
+            self.feedback.borrow_mut().clear();
+        }
+        let feedback = self.feedback.borrow();
         let state = if doc.needs_export() {
-            "Não exportada"
-        } else {
+            "Alterações não exportadas"
+        } else if feedback.is_empty() {
             "Copiada ou salva"
+        } else {
+            &feedback
         };
-        self.status.setStringValue(&NSString::from_str(&format!(
-            "{} × {} px  ·  {:.0}%  ·  {}",
+        self.status.setStringValue(&NSString::from_str(state));
+        self.status.setToolTip(Some(&NSString::from_str(state)));
+        self.metrics.setStringValue(&NSString::from_str(&format!(
+            "{} × {} px · {:.0}%",
             doc.width,
             doc.height,
-            self.canvas.zoom() * 100.0,
-            state
+            self.canvas.zoom() * 100.0
         )));
         self.window.setDocumentEdited(doc.needs_export());
     }

@@ -57,3 +57,26 @@ target/debug/rsx --logs-diagnostics target/logs-diagnostics
 Esse modo não lê o histórico pessoal nem captura a tela; usa registros
 sintéticos. O coletor normal de telemetria continua registrando o ciclo de vida
 da execução localmente.
+
+## Interface personalizada
+
+O diagnóstico também percorre os layouts de 760, 959, 960, 1040 e 1440 pontos, aciona os botões de desfazer/refazer e o seletor de ferramentas reais, verifica feedback de exportação, valida a seleção dos logs após inserção/remoção de registros e gera prévias do editor, das cores e da aparência em temas claro e escuro. Os testes de tokens verificam contraste de texto, ação principal, foco e erro nas duas paletas.
+
+Para gerar as prévias sem os 50 ciclos de memória:
+
+```sh
+cargo build --locked
+target/debug/rsx --ui-diagnostics
+```
+
+O modo usa imagem sintética e clipboard privado; não salva temas, atalhos ou paletas. Exige acesso à sessão gráfica do macOS. A navegação completa com teclado físico, VoiceOver e persistência do tema após reiniciar continuam dependendo de verificação manual.
+
+## Identidade de assinatura e atualização local
+
+`python3 -m unittest discover -s tests -p test_signing.py` verifica rejeição de identidade ausente/incompatível e preservação do app após falha de verificação ou de movimentação da cópia anterior. Não acessa o Chaves nem a tela.
+
+Depois de configurar o certificado local, `python3 tests/verify_local_signing.py` compila dois executáveis sintéticos distintos, assina ambos e compara seus requisitos de identidade. Instala somente em uma pasta temporária, verifica uma atualização compatível e rejeita pacotes incompatíveis/ad-hoc. Pode exigir confirmação do Chaves para o assinador. Não solicita Gravação de Tela.
+
+Os testes Rust de `macos::permission` cobrem acesso concedido, solicitação inicial, recusa, reinício, revogação e recuperação explícita. Captura real antes/depois de atualizar exige validação na sessão gráfica com a autorização do usuário.
+
+Para conferir captura real pela identidade instalada, execute `open -n -a /Applications/RSX.app --args --capture-access-diagnostics /caminho/absoluto/relatorio.json` com o RSX encerrado. Esse modo consulta a autorização sem solicitá-la, realiza duas capturas de tela principal somente se autorizado e registra apenas resultado e dimensões. Os arquivos de imagem temporários são removidos; o clipboard não é usado. Exige autorização explícita para testar captura real.

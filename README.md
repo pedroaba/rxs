@@ -17,6 +17,11 @@ RSX fica na barra de menus e abre um editor sob demanda para destacar o que impo
 
 ## Veja o resultado
 
+![Editor do RSX com componentes personalizados em tema escuro](docs/assets/editor-dark.png)
+
+A interface usa componentes visuais próprios, com botões planos, campos com bordas, seletores e superfícies inspirados em aplicações web. Em **Aparência…**, escolha Escuro, Claro ou Sistema; a prévia é imediata e Cancelar restaura o tema anterior. O editor adapta as ferramentas ao tamanho da janela, e os logs oferecem lista e painel de detalhes. A base continua em AppKit e Core Graphics, sem WebView.
+
+
 ![Antes e depois das anotações do RSX em uma imagem sintética](docs/assets/annotation-demo.gif)
 
 *GIF alternando a imagem sintética original e o PNG produzido pelo diagnóstico nativo. Demonstra o resultado das ferramentas; não é uma gravação da interface nem de uma captura real. Os marcadores nos cantos verificam orientação e transparência.*
@@ -79,7 +84,21 @@ bash scripts/bundle.sh
 open dist/RSX.app
 ```
 
-O pacote fica em `dist/RSX.app`. Para uso diário, mova-o para `/Applications` ou `~/Applications` e abra dessa localização. Por padrão, o script cria uma assinatura ad-hoc para uso local. Como a identidade dessa assinatura muda junto com o executável, o macOS pode pedir novamente permissões de privacidade depois de cada recompilação ou atualização. Para assinar com uma identidade Developer ID disponível no Chaves e preservar a identidade do app entre versões, use `RSX_CODESIGN_IDENTITY="Developer ID Application: Seu Nome (TEAMID)" bash scripts/bundle.sh`. Distribuição pública também requer notarização. O script compila para a arquitetura do Mac atual. A validação inicial é em Apple Silicon; Intel ainda precisa de validação própria.
+O pacote fica em `dist/RSX.app`. Para uso diário neste Mac, configure uma identidade local uma única vez e instale pelo instalador validado:
+
+```bash
+python3 scripts/signing.py setup
+bash scripts/bundle.sh
+python3 scripts/signing.py install --migrate-adhoc
+```
+
+`--migrate-adhoc` é necessário apenas para trocar a instalação antiga pela primeira versão com identidade estável. Nas próximas atualizações, execute `bash scripts/bundle.sh` e `python3 scripts/signing.py install`. O instalador confere a identidade antes de encerrar o app, respeita alterações não exportadas, mantém uma cópia de recuperação e restaura o app anterior se a instalação falhar.
+
+O certificado **RSX Local Code Signing** fica no Chaves do usuário, com validade de 30 anos e confiança restrita a assinatura de código. A configuração em `~/Library/Application Support/RSX/signing.json` contém apenas a identificação pública do certificado e do Chaves. Não apague ou regenere essa identidade entre atualizações. Sem a identidade, a compilação de uso diário falha em vez de voltar silenciosamente à assinatura ad-hoc.
+
+A primeira migração exige uma nova autorização de Gravação de Tela. Se a entrada antiga aparecer ativada mas o acesso continuar bloqueado, desative e ative somente o RSX nos Ajustes e reabra o app. Se necessário, remova a entrada antiga e adicione `/Applications/RSX.app`; isso é uma etapa de migração, não parte das próximas atualizações. Atualizações assinadas com a mesma identidade preservam o requisito usado pelo macOS para reconhecer o app. A autorização real sempre é consultada: preferências locais registram somente que o pedido inicial já foi apresentado. Use **Permissão de captura…** no menu para consultar o acesso, abrir Ajustes ou solicitar acesso explicitamente. Revogação, troca de identidade e alterações nas políticas do macOS podem exigir nova autorização.
+
+Para diagnósticos ou CI, use `RSX_ALLOW_ADHOC=1 bash scripts/bundle.sh`; esses pacotes não devem substituir a instalação de uso diário. Para distribuição, use `RSX_CODESIGN_IDENTITY="Developer ID Application: Seu Nome (TEAMID)" bash scripts/bundle.sh`. Distribuição pública também requer notarização. A configuração local não é usada na CI. O script compila para a arquitetura do Mac atual; Intel ainda precisa de validação própria.
 
 ## Builds automáticos e releases
 
@@ -115,7 +134,7 @@ Acompanhe a execução em [Actions](https://github.com/pedroaba/rxs/actions/work
 2. Para manter as teclas habituais, abra **Ajustes do Sistema → Teclado → Atalhos de Teclado → Capturas de Tela** e desative as ações do sistema que usam **Command+Shift+3** e **Command+Shift+4**. Preserve **Command+Shift+5**. O RSX não altera essas configurações automaticamente.
 3. No menu do RSX, escolha **Atalhos…**, clique no controle da captura e pressione a combinação desejada. Clique em **Aplicar** para ativar. **Esc** cancela a gravação; **Tab** passa ao próximo controle. Se preferir, use `Command+Option+3` e `Command+Option+4` ou outras combinações com Command e Shift/Option/Control mais uma letra/número.
 4. **Command+Shift+3** captura a tela principal. **Command+Shift+4** abre a seleção nativa: arraste uma região ou pressione espaço para escolher uma janela. **Escape** cancela. As mesmas ações estão no menu, incluindo captura direta de janela.
-5. Se o macOS pedir permissão, autorize o RSX em **Privacidade e Segurança → Gravação de Tela** (o nome pode incluir áudio, conforme a versão do macOS), encerre o RSX e abra-o novamente. Se a chave já estiver ligada, desligue e ligue outra vez. Em builds ad-hoc atualizados, remova a entrada antiga e adicione a cópia atual do app.
+5. Se o macOS pedir permissão, autorize o RSX em **Privacidade e Segurança → Gravação de Tela** (o nome pode incluir áudio, conforme a versão do macOS), encerre o RSX e abra-o novamente. Na migração inicial da assinatura ad-hoc, pode ser necessário selecionar novamente a cópia em `/Applications/RSX.app`. Atualizações locais devem passar pelo instalador para preservar a identidade; não é necessário redefinir todas as permissões do sistema.
 
 O app verifica conflitos com atalhos do sistema e erros de registro. Ao alterar configurações no macOS, volte a **Atalhos… → Aplicar**. Os atalhos não são ativados antes dessa configuração. O atalho de tela inteira captura o monitor principal; região/janela podem ser selecionadas nos demais monitores. Se você mantiver Control pressionado no seletor nativo, o macOS pode enviar a captura diretamente ao clipboard, sem abrir o editor.
 
@@ -168,6 +187,8 @@ dist/RSX.app/Contents/MacOS/rsx --diagnostics
 ```
 
 Feche outra instância do RSX antes do diagnóstico. O modo `--diagnostics` gera uma imagem sintética 4K, valida orientação, transparência, coordenadas das anotações e roundtrip PNG em um clipboard privado. Também verifica a cópia automática e o estado de exportação, exercita o cancelamento da gravação de atalhos e gera imagens da janela de atalhos nas aparências clara e escura. Abre/exporta/fecha o editor 50 vezes e termina. Não captura sua tela, altera atalhos nem substitui o clipboard normal. Os arquivos ficam em `target/diagnostics/`; personalize com `RSX_DIAGNOSTICS_DIR`.
+
+`--ui-diagnostics` verifica os componentes personalizados, os temas e os layouts e gera prévias em `target/diagnostics/`, sem realizar capturas reais nem alterar preferências salvas.
 
 `--demo` abre uma imagem sintética no editor para inspeção manual, sem configurar atalhos. Este modo não cria uma captura real.
 

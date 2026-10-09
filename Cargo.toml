@@ -24,19 +24,19 @@ objc2 = "0.6.4"
 block2 = "0.6.2"
 objc2-foundation = { version = "0.3.2", default-features = false, features = [
     "std", "NSObject", "NSArray", "NSDictionary", "NSString", "NSData",
-    "NSNotification", "NSProcessInfo", "NSUserDefaults", "NSURL", "NSGeometry", "NSError", "NSEnumerator", "NSDate", "NSDateFormatter", "NSRunLoop", "NSObjCRuntime",
+    "NSAttributedString", "NSNotification", "NSIndexSet", "NSProcessInfo", "NSUserDefaults", "NSURL", "NSGeometry", "NSError", "NSEnumerator", "NSDate", "NSDateFormatter", "NSRunLoop", "NSObjCRuntime",
 ] }
 objc2-app-kit = { version = "0.3.2", default-features = false, features = [
     "std", "objc2-core-foundation", "objc2-core-graphics", "NSApplication",
     "NSResponder", "NSMenu", "NSMenuItem", "NSWindow", "NSView", "NSControl",
     "NSButton", "NSButtonCell", "NSCell", "NSTextField", "NSFont", "NSFontDescriptor", "NSColor",
-    "NSColorSpace", "NSSlider", "NSSliderCell", "NSActionCell", "NSPanel", "NSSavePanel",
+    "NSColorSpace", "NSColorList", "NSTrackingArea", "NSSlider", "NSSliderCell", "NSActionCell", "NSPanel", "NSSavePanel",
     "NSScrollView", "NSClipView", "NSScroller", "NSSegmentedControl",
     "NSSegmentedCell", "NSPopUpButton", "NSPopUpButtonCell", "NSGraphics",
     "NSGraphicsContext", "NSBitmapImageRep", "NSImageRep", "NSImage",
     "NSBezierPath", "NSCursor", "NSEvent", "NSStatusBar", "NSStatusItem",
-    "NSAccessibility", "NSAccessibilityProtocols", "NSPopover", "NSViewController", "NSAppearance", "NSColorSampler", "block2",
-    "NSStatusBarButton", "NSAlert", "NSPasteboard", "NSWorkspace", "NSRunningApplication", "NSText", "NSTextView", "NSTextContainer",
+    "NSAccessibility", "NSAccessibilityProtocols", "NSPopover", "NSViewController", "NSUserInterfaceItemIdentification", "NSTextFieldCell", "NSTableView", "NSTableColumn", "NSTableHeaderView", "NSSplitView", "NSAppearance", "NSColorSampler", "block2",
+    "NSStatusBarButton", "NSAlert", "NSPasteboard", "NSWorkspace", "NSRunningApplication", "NSAttributedString", "NSParagraphStyle", "NSTextStorage", "NSText", "NSTextView", "NSTextContainer",
 ] }
 objc2-core-graphics = { version = "0.3.2", default-features = false, features = [
     "std", "CGContext", "CGGeometry", "CGImage", "CGColorSpace", "CGDataProvider", "CGWindow",

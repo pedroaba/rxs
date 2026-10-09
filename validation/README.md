@@ -81,3 +81,40 @@ Coleção reorganizada em cinco colunas, com até três linhas visíveis e rolag
 - Pacote local recompilado em `dist/RXS.app`, com Info.plist e assinatura ad-hoc verificados. Não foi instalado nem publicado.
 
 Continuam pendentes nesta rodada: captura real com permissão de Gravação de Tela, colagem em outro aplicativo, aplicação/persistência de novos atalhos globais com reinício, suspensão/restauração de registros globais em uso e falha real de registro. Esses cenários não são comprovados pelos testes sintéticos ou pela gravação de um rascunho na janela.
+
+## Componentes com aparência de aplicações web — 09/10/2026
+
+O RSX agora usa componentes visuais próprios para botões, seletores, grupos de ferramentas, campos e cabeçalhos de tabela. O editor tem cabeçalho de exportação separado, ferramentas adaptáveis e área de trabalho com margens e borda. Atalhos, cores, logs e a janela Aparência compartilham os mesmos papéis de cor. A implementação mantém Rust, AppKit e Core Graphics, sem WebView.
+
+Verificações executadas nesta rodada:
+
+- Testes automatizados, Clippy com avisos tratados como erros e formatação passaram.
+- Os dois testes nativos explícitos passaram: 50 ciclos de abrir/copiar/exportar/fechar com zero canvases ou capturas temporárias retidos, e suspensão/retomada/rollback de atalhos temporários.
+- O diagnóstico aciona os botões reais de desfazer/refazer e o seletor de ferramentas, valida feedback de exportação, rejeita entradas de cor inválidas preservando o texto e verifica a seleção de logs após inserção e remoção de registros.
+- Temas claro e escuro, prévia de aparência com cancelamento, editor padrão e compacto, seletor de cores, atalhos e logs foram renderizados e inspecionados. As prévias estão em `target/web-ui/`; o editor principal e as cores também foram atualizados em `docs/assets/`.
+- Os tokens de texto comum, texto secundário, ação principal e erro são testados contra contraste mínimo de 4,5:1; o foco é testado contra o fundo com mínimo de 3:1. Isso não representa certificação de acessibilidade do app.
+- O pacote local é gerado em `dist/RSX.app`, com assinatura ad-hoc; não foi instalado ou publicado.
+
+O modo `--ui-diagnostics` permite repetir a verificação visual sem executar os 50 ciclos. Usa imagem sintética e clipboard privado, sem salvar temas, atalhos ou paletas. A execução exige acesso à sessão gráfica; o ambiente restrito pode impedir a resolução de aparências ou serviços de janela.
+
+Continuam pendentes: captura real com permissões, monitores/Retina físicos, navegação completa por teclado físico, VoiceOver, persistência do tema após reiniciar e acompanhamento de uma alteração real do tema do sistema. O escuro/claro e a volta à herança do sistema foram verificados por diagnóstico; não foram realizados testes com usuários.
+
+### Tabela de logs com componentes próprios — 09/10/2026
+
+A tabela recebeu células desenhadas com espaçamento de 12 pontos, horário com dígitos de largura fixa, tipos em badges semânticos, separadores discretos, hover e seleção arredondada. O foco de teclado aparece na linha selecionada; a moldura nativa externa foi removida. Lista e detalhes usam superfícies arredondadas separadas por um divisor ajustável. Detalhes preservam seleção e cópia, com título destacado e identificadores em monospace.
+
+Testes automatizados, formatação e Clippy passaram. O diagnóstico específico de logs passou com eventos sintéticos de seta para cima/baixo, atualização dos detalhes, filtros, preservação e fallback da seleção, redimensionamento e estados vazios/limitados. Renderizações clara e escura foram inspecionadas na janela mínima de 900 × 640 pontos, incluindo mensagem longa truncada na tabela e mensagem de erro quebrada nos detalhes. O contraste dos textos dos badges é verificado sobre suas superfícies compostas, inclusive em linhas selecionadas, com mínimo de 4,5:1.
+
+As limitações manuais da rodada anterior continuam válidas, especialmente teclado físico, Retina e VoiceOver.
+
+### Alinhamento da busca
+
+O retângulo de desenho do campo agora usa a altura real da fonte para centralizar placeholder e conteúdo. A área de edição permanece centralizada. O diagnóstico de UI passou, e as renderizações do campo de busca vazio/preenchido e do seletor de cores foram inspecionadas.
+
+## Assinatura estável e fluxo de permissão — 09/10/2026
+
+Foi criada a identidade local RSX Local Code Signing no Chaves, com configuração pública fora do repositório e confiança limitada a assinatura de código. A compilação normal exige identidade disponível; CI/diagnósticos declaram ad-hoc explicitamente. A instalação prepara um candidato validado, confere o certificado configurado e a compatibilidade com a instalação anterior, respeita encerramento com alterações e mantém cópia de recuperação.
+
+Os testes Rust de permissão passaram com autorização concedida, pedido inicial, recusa, reinício, revogação e ação explícita. A preferência salva registra apenas que um pedido já foi apresentado. Quatro testes do instalador passaram: identidade ausente, identidade incompatível, rollback após falha de validação e preservação da instalação quando mover a cópia anterior falha. Testes existentes, formatação e Clippy passaram.
+
+A verificação nativa de dois executáveis distintos passou: ambos mantiveram o mesmo requisito de identidade, uma atualização compatível foi instalada em pasta temporária e versões incompatíveis/ad-hoc foram rejeitadas sem substituir o destino. A identidade foi reutilizada sem gerar novo certificado. O pacote assinado foi instalado em `/Applications/RSX.app`, com cópia anterior em `/Applications/.RSX-backup-20261009-175757-452926.app`; assinatura e igualdade do executável com o pacote foram verificadas. O aplicativo instalado abriu. A ferramenta de inspeção do RSX retornou timeout, mas a migração foi concluída pelos Ajustes com autorização específica do usuário: removida somente a entrada antiga do RSX e adicionada a cópia atual de `/Applications/RSX.app`. Desativar e reativar a entrada antiga não renovou sua identidade neste Mac. Depois da substituição, três diagnósticos reais passaram, cada um com duas capturas de 3420 × 2224 pixels e zero chamadas do app para solicitar permissão. A verificação incluiu instalar um pacote assinado com outro hash de executável (build de teste 4) e retornar ao pacote final (build 3), preservando a mesma identidade e a autorização em ambos. As imagens temporárias foram removidas, nenhum clipboard foi usado e os relatórios sem imagem estão em `target/permission-validation/`. O pacote final foi reaberto para uso normal. A migração da assinatura ad-hoc requer uma nova autorização de Gravação de Tela; não houve edição direta do banco nem reset global de permissões do macOS. A troca da entrada do RSX pela interface dos Ajustes foi autorizada separadamente pelo usuário.

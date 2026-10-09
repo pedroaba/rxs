@@ -2,6 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 export MACOSX_DEPLOYMENT_TARGET=13.0
+python3 scripts/signing.py preflight
 cargo build --release --locked
 app="dist/RSX.app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources" target/RSX.iconset
@@ -15,15 +16,6 @@ for size in 16 32 128 256 512; do
 done
 iconutil -c icns target/RSX.iconset -o "$app/Contents/Resources/RSX.icns"
 plutil -lint "$app/Contents/Info.plist"
-# A Developer ID identity gives the app a stable identity across updates, which
-# macOS needs in order to preserve privacy permissions such as Screen Recording.
-# Keep ad-hoc signing available for local builds only.
-RSX_CODESIGN_IDENTITY="${RSX_CODESIGN_IDENTITY:-${RXS_CODESIGN_IDENTITY:-}}"
-if [[ -n "$RSX_CODESIGN_IDENTITY" ]]; then
-    codesign --force --options runtime --timestamp --sign "$RSX_CODESIGN_IDENTITY" "$app"
-else
-    codesign --force --sign - "$app"
-    printf 'Aviso: assinatura ad-hoc; permissões do macOS não persistem após recompilar ou atualizar.\n' >&2
-fi
+python3 scripts/signing.py sign "$app"
 codesign --verify --strict "$app"
 printf 'App pronto: %s/dist/RSX.app\n' "$PWD"

@@ -37,7 +37,7 @@ fn checker(frame: NSRect) {
 }
 
 // Native button images keep AppKit's keyboard/focus behavior while showing exact sRGB swatches.
-fn swatch(c: Rgba) -> Retained<NSImage> {
+pub(super) fn swatch(c: Rgba) -> Retained<NSImage> {
     let draw = block2::RcBlock::new(move |bounds: NSRect| {
         NSGraphicsContext::saveGraphicsState_class();
         NSBezierPath::bezierPathWithRoundedRect_xRadius_yRadius(bounds, 4.0, 4.0).addClip();
@@ -107,7 +107,7 @@ define_class!(
         #[unsafe(method(drawKnob:))]
         fn draw_knob(&self, bounds: NSRect) {
             let knob = rect(bounds.origin.x+(bounds.size.width-12.0)/2.0,bounds.origin.y+(bounds.size.height-12.0)/2.0,12.0,12.0);
-            NSColor::whiteColor().setFill();
+            super::ui::color(super::ui::Role::Text).setFill();
             NSBezierPath::bezierPathWithOvalInRect(knob).fill();
             native([0.96,0.24,0.39,1.0]).setFill();
             NSBezierPath::bezierPathWithOvalInRect(rect(knob.origin.x+3.0,knob.origin.y+3.0,6.0,6.0)).fill();
@@ -143,8 +143,9 @@ define_class!(
         fn flipped(&self) -> bool { true }
         #[unsafe(method(drawRect:))]
         fn draw(&self, _dirty: NSRect) {
-            fill(self.bounds(),[0.18,0.18,0.18,1.0]);
-            let preview = rect(0.0,0.0,260.0,88.0);
+            super::ui::color(super::ui::Role::Surface).setFill();
+            NSBezierPath::bezierPathWithRect(self.bounds()).fill();
+            let preview = rect(0.0,0.0,320.0,80.0);
             checker(preview);
             fill(preview,self.ivars().preview.get());
         }
@@ -158,28 +159,35 @@ define_class!(
         }
         #[unsafe(method(sliderChanged:))]
         fn slider_changed(&self, sender: &NSSlider) {
-            if let Some(owner) = self.ivars().owner.borrow().upgrade() { owner.change_channel(sender.tag() as usize,sender.doubleValue()); }
+            if let Some(owner) = self.ivars().owner.borrow().upgrade() { let i = sender.tag() as usize; owner.invalid_numbers.borrow_mut()[i] = false; owner.change_channel(i,sender.doubleValue()); }
         }
         #[unsafe(method(numberChanged:))]
         fn number_changed(&self, sender: &NSTextField) {
             if let Some(owner) = self.ivars().owner.borrow().upgrade() {
                 let index = sender.tag() as usize;
                 match sender.stringValue().to_string().trim().parse::<f64>() {
-                    Ok(value) if value.is_finite() && value >= 0.0 && value <= owner.maximum(index) => owner.change_channel(index,value),
-                    _ => sender.setTextColor(Some(&NSColor::systemRedColor())),
+                    Ok(value) if value.is_finite() && value >= 0.0 && value <= owner.maximum(index) => {
+                        owner.invalid_numbers.borrow_mut()[index] = false;
+                        owner.change_channel(index,value);
+                    },
+                    _ => {
+                        owner.invalid_numbers.borrow_mut()[index] = true;
+                        sender.setTextColor(Some(&super::ui::color(super::ui::Role::Danger)));
+                        owner.show_validation();
+                    },
                 }
             }
         }
         #[unsafe(method(hexChanged:))]
         fn hex_changed(&self, sender: &NSTextField) {
             if let Some(owner) = self.ivars().owner.borrow().upgrade() {
-                if let Some(c) = color::parse_hex(&sender.stringValue().to_string(),owner.rgba.get()[3]) { owner.set_color(c,true); }
-                else { sender.setTextColor(Some(&NSColor::systemRedColor())); }
+                if let Some(c) = color::parse_hex(&sender.stringValue().to_string(),owner.rgba.get()[3]) { owner.invalid_hex.set(false); owner.set_color(c,true); }
+                else { owner.invalid_hex.set(true); sender.setTextColor(Some(&super::ui::color(super::ui::Role::Danger))); owner.show_validation(); }
             }
         }
         #[unsafe(method(modeChanged:))]
         fn mode_changed(&self, sender: &NSPopUpButton) {
-            if let Some(owner) = self.ivars().owner.borrow().upgrade() { owner.rgb_mode.set(sender.indexOfSelectedItem()==1); owner.sync(); }
+            if let Some(owner) = self.ivars().owner.borrow().upgrade() { owner.rgb_mode.set(sender.indexOfSelectedItem()==1); *owner.invalid_numbers.borrow_mut() = [false; 4]; owner.sync(); }
         }
         #[unsafe(method(copyColor:))]
         fn copy_color(&self, _sender: &NSButton) {
@@ -200,7 +208,7 @@ define_class!(
                     owner.render_palette();
                     let index = owner.palette.borrow().len() - 1;
                     owner.palette_view.scrollRectToVisible(rect(
-                        (index % 5) as f64 * 40.0, (index / 5) as f64 * 36.0, 32.0, 28.0));
+                        (index % 5) as f64 * 48.0, (index / 5) as f64 * 36.0, 32.0, 28.0));
                 }
             }
         }
@@ -235,6 +243,9 @@ struct Inner {
     popover: Retained<NSPopover>,
     view: Retained<PickerView>,
     hex: Retained<NSTextField>,
+    validation: Retained<NSTextField>,
+    invalid_hex: Cell<bool>,
+    invalid_numbers: RefCell<[bool; 4]>,
     sliders: Vec<Retained<NSSlider>>,
     cells: Vec<Retained<GradientCell>>,
     numbers: Vec<Retained<NSTextField>>,
@@ -253,8 +264,8 @@ struct Inner {
 fn label(text: &str, frame: NSRect, mtm: MainThreadMarker) -> Retained<NSTextField> {
     let field = NSTextField::labelWithString(&NSString::from_str(text), mtm);
     field.setFrame(frame);
-    field.setFont(Some(&NSFont::systemFontOfSize(11.0)));
-    field.setTextColor(Some(&NSColor::lightGrayColor()));
+    field.setFont(Some(&NSFont::systemFontOfSize(super::ui::BODY)));
+    super::ui::secondary_label(&field);
     field
 }
 fn edit(
@@ -263,9 +274,9 @@ fn edit(
     target: &PickerView,
     action: objc2::runtime::Sel,
 ) -> Retained<NSTextField> {
-    let field = NSTextField::textFieldWithString(&NSString::from_str(text), target.mtm());
+    let field = super::ui::input(target.mtm(), text, frame);
     field.setFrame(frame);
-    field.setFont(Some(&NSFont::systemFontOfSize(11.0)));
+    field.setFont(Some(&NSFont::systemFontOfSize(super::ui::BODY)));
     field.setBezeled(false);
     field.setDrawsBackground(false);
     unsafe {
@@ -284,14 +295,7 @@ fn button(
     action: objc2::runtime::Sel,
     help: &str,
 ) -> Retained<NSButton> {
-    let button = unsafe {
-        NSButton::buttonWithTitle_target_action(
-            &NSString::from_str(title),
-            Some(target),
-            Some(action),
-            target.mtm(),
-        )
-    };
+    let button = super::ui::button(target.mtm(), title, target, action, frame);
     let symbol = match title {
         "⌾" => Some("eyedropper"),
         "⧉" => Some("square.on.square"),
@@ -308,7 +312,7 @@ fn button(
         button.setImage(Some(&image));
     }
     button.setFrame(frame);
-    button.setBezelStyle(NSBezelStyle::Toolbar);
+
     button.setToolTip(Some(&NSString::from_str(help)));
     button.setAccessibilityLabel(Some(&NSString::from_str(help)));
     button
@@ -320,17 +324,13 @@ pub struct ColorPicker {
 impl ColorPicker {
     pub fn new(mtm: MainThreadMarker, initial: Rgba, changed: impl Fn(Rgba) + 'static) -> Self {
         let view: Retained<PickerView> = unsafe {
-            msg_send![super(PickerView::alloc(mtm).set_ivars(PickerViewIvars::default())), initWithFrame: rect(0.0,0.0,260.0,310.0)]
+            msg_send![super(PickerView::alloc(mtm).set_ivars(PickerViewIvars::default())), initWithFrame: rect(0.0,0.0,320.0,378.0)]
         };
-        let hex = edit("", rect(16.0, 100.0, 92.0, 22.0), &view, sel!(hexChanged:));
+        let hex = edit("", rect(16.0, 96.0, 112.0, 28.0), &view, sel!(hexChanged:));
         hex.setToolTip(Some(&NSString::from_str("Cor hexadecimal — seis dígitos")));
         hex.setAccessibilityLabel(Some(&NSString::from_str("Cor hexadecimal")));
         view.addSubview(&hex);
-        let mode = NSPopUpButton::initWithFrame_pullsDown(
-            NSPopUpButton::alloc(mtm),
-            rect(117.0, 96.0, 64.0, 26.0),
-            false,
-        );
+        let mode = super::ui::select(mtm, rect(136.0, 96.0, 80.0, 32.0));
         for name in ["HSB", "RGB"] {
             mode.addItemWithTitle(&NSString::from_str(name));
         }
@@ -342,14 +342,14 @@ impl ColorPicker {
         view.addSubview(&mode);
         view.addSubview(&button(
             "⌾",
-            rect(185.0, 96.0, 28.0, 26.0),
+            rect(224.0, 96.0, 32.0, 32.0),
             &view,
             sel!(sampleColor:),
             "Capturar cor da tela",
         ));
         view.addSubview(&button(
             "⧉",
-            rect(217.0, 96.0, 28.0, 26.0),
+            rect(264.0, 96.0, 32.0, 32.0),
             &view,
             sel!(copyColor:),
             "Copiar código HEX",
@@ -359,11 +359,11 @@ impl ColorPicker {
         let mut numbers = Vec::new();
         let mut labels = Vec::new();
         for i in 0..4 {
-            let y = 133.0 + i as f64 * 25.0;
-            let caption = label("", rect(12.0, y + 4.0, 16.0, 16.0), mtm);
+            let y = 140.0 + i as f64 * 32.0;
+            let caption = label("", rect(16.0, y + 6.0, 20.0, 20.0), mtm);
             view.addSubview(&caption);
             labels.push(caption);
-            let slider = NSSlider::initWithFrame(NSSlider::alloc(mtm), rect(30.0, y, 177.0, 22.0));
+            let slider = NSSlider::initWithFrame(NSSlider::alloc(mtm), rect(40.0, y, 208.0, 28.0));
             let cell: Retained<GradientCell> = unsafe {
                 msg_send![
                     super(GradientCell::alloc(mtm).set_ivars(GradientIvars::default())),
@@ -384,7 +384,7 @@ impl ColorPicker {
             cells.push(cell);
             let number = edit(
                 "",
-                rect(213.0, y + 2.0, 39.0, 20.0),
+                rect(256.0, y + 2.0, 48.0, 26.0),
                 &view,
                 sel!(numberChanged:),
             );
@@ -392,23 +392,30 @@ impl ColorPicker {
             view.addSubview(&number);
             numbers.push(number);
         }
-        view.addSubview(&label("Minha coleção", rect(16.0, 241.0, 170.0, 18.0), mtm));
+        let validation = label("", rect(16.0, 272.0, 288.0, 36.0), mtm);
+        validation.setMaximumNumberOfLines(2);
+        if let Some(cell) = validation.cell() {
+            cell.setWraps(true);
+        }
+        validation.setTextColor(Some(&super::ui::color(super::ui::Role::Danger)));
+        view.addSubview(&validation);
+        view.addSubview(&label("Minha coleção", rect(16.0, 308.0, 220.0, 20.0), mtm));
         let scroll =
-            NSScrollView::initWithFrame(NSScrollView::alloc(mtm), rect(12.0, 265.0, 204.0, 28.0));
+            NSScrollView::initWithFrame(NSScrollView::alloc(mtm), rect(16.0, 334.0, 240.0, 28.0));
         scroll.setDrawsBackground(false);
         scroll.setHasHorizontalScroller(false);
         scroll.setHasVerticalScroller(true);
         scroll.setScrollerStyle(NSScrollerStyle::Overlay);
         scroll.setAutohidesScrollers(true);
         let palette_view: Retained<PaletteView> = unsafe {
-            msg_send![super(PaletteView::alloc(mtm).set_ivars(())), initWithFrame: rect(0.0,0.0,204.0,28.0)]
+            msg_send![super(PaletteView::alloc(mtm).set_ivars(())), initWithFrame: rect(0.0,0.0,240.0,28.0)]
         };
         let palette_view: Retained<NSView> = Retained::into_super(palette_view);
         scroll.setDocumentView(Some(&palette_view));
         view.addSubview(&scroll);
         let add = button(
             "+",
-            rect(218.0, 265.0, 32.0, 28.0),
+            rect(272.0, 334.0, 32.0, 28.0),
             &view,
             sel!(addColor:),
             "Salvar cor na coleção",
@@ -420,14 +427,10 @@ impl ColorPicker {
         controller.setView(&view);
         let popover = NSPopover::new(mtm);
         popover.setContentViewController(Some(&controller));
-        popover.setContentSize(NSSize::new(260.0, 310.0));
+        popover.setContentSize(NSSize::new(320.0, 378.0));
         popover.setDelegate(Some(objc2::runtime::ProtocolObject::from_ref(&*view)));
         popover.setBehavior(NSPopoverBehavior::Transient);
         popover.setAnimates(false);
-        unsafe {
-            popover
-                .setAppearance(NSAppearance::appearanceNamed(NSAppearanceNameDarkAqua).as_deref());
-        }
         let saved = NSUserDefaults::standardUserDefaults()
             .stringForKey(&NSString::from_str("colorPickerPalette"));
         let palette = saved
@@ -439,6 +442,9 @@ impl ColorPicker {
             popover,
             view,
             hex,
+            validation,
+            invalid_hex: Cell::new(false),
+            invalid_numbers: RefCell::new([false; 4]),
             sliders,
             cells,
             numbers,
@@ -529,6 +535,9 @@ impl ColorPicker {
         inner.hex.setStringValue(&NSString::from_str("invalid"));
         send(&inner.hex);
         assert_eq!(inner.rgba.get(), before);
+        assert_eq!(inner.hex.stringValue().to_string(), "invalid");
+        assert!(!inner.validation.stringValue().is_empty());
+        inner.invalid_hex.set(false);
         inner.rgb_mode.set(true);
         inner.sync();
         inner.numbers[1].setStringValue(&NSString::from_str("255"));
@@ -540,6 +549,7 @@ impl ColorPicker {
         inner.sliders[3].setDoubleValue(25.0);
         send(&inner.sliders[3]);
         assert_eq!(inner.rgba.get()[3], 0.25);
+        *inner.invalid_numbers.borrow_mut() = [false; 4];
         inner.rgb_mode.set(false);
         inner.set_color(initial, true);
     }
@@ -608,9 +618,13 @@ impl Inner {
     fn sync(&self) {
         let c = self.rgba.get();
         let hsv = color::hsv(c, self.hue.get());
-        self.hex
-            .setStringValue(&NSString::from_str(&color::hex(c, false)));
-        self.hex.setTextColor(Some(&NSColor::whiteColor()));
+        if !self.invalid_hex.get() {
+            self.hex
+                .setStringValue(&NSString::from_str(&format!("#{}", color::hex(c, false))));
+            self.hex
+                .setTextColor(Some(&super::ui::color(super::ui::Role::Text)));
+        }
+        self.show_validation();
         self.view.ivars().preview.set(c);
         self.view.setNeedsDisplay(true);
         let names = if self.rgb_mode.get() {
@@ -640,8 +654,10 @@ impl Inner {
             self.sliders[i].setDoubleValue(value);
             self.sliders[i].setToolTip(Some(&NSString::from_str(names[i])));
             self.numbers[i].setToolTip(Some(&NSString::from_str(names[i])));
-            self.numbers[i].setStringValue(&NSString::from_str(&format!("{value:.0}")));
-            self.numbers[i].setTextColor(Some(&NSColor::lightGrayColor()));
+            if !self.invalid_numbers.borrow()[i] {
+                self.numbers[i].setStringValue(&NSString::from_str(&format!("{value:.0}")));
+                self.numbers[i].setTextColor(Some(&super::ui::color(super::ui::Role::Text)));
+            }
             self.labels[i].setStringValue(&NSString::from_str(short[i]));
             let stops = (0..=6)
                 .map(|step| {
@@ -668,6 +684,27 @@ impl Inner {
             NSView::setNeedsDisplay(&self.sliders[i], true);
         }
     }
+    fn show_validation(&self) {
+        let invalid = self.invalid_numbers.borrow();
+        let message = if self.invalid_hex.get() {
+            "HEX inválido. Use seis dígitos, como #F73E63.".into()
+        } else if let Some(i) = invalid.iter().position(|v| *v) {
+            let names = if self.rgb_mode.get() {
+                ["Vermelho", "Verde", "Azul", "Opacidade"]
+            } else {
+                ["Matiz", "Saturação", "Brilho", "Opacidade"]
+            };
+            format!(
+                "{}: use um número entre 0 e {:.0}.",
+                names[i],
+                self.maximum(i)
+            )
+        } else {
+            String::new()
+        };
+        self.validation
+            .setStringValue(&NSString::from_str(&message));
+    }
     fn render_palette(&self) {
         for child in self.palette_view.subviews() {
             child.removeFromSuperview();
@@ -677,11 +714,11 @@ impl Inner {
         let content_height = rows as f64 * 36.0 - 8.0;
         let visible_height = rows.min(3) as f64 * 36.0 - 8.0;
         self.palette_view
-            .setFrameSize(NSSize::new(204.0, content_height));
+            .setFrameSize(NSSize::new(240.0, content_height));
         self.palette_scroll
-            .setFrameSize(NSSize::new(204.0, visible_height));
+            .setFrameSize(NSSize::new(240.0, visible_height));
         self.popover
-            .setContentSize(NSSize::new(260.0, 265.0 + visible_height + 14.0));
+            .setContentSize(NSSize::new(320.0, 334.0 + visible_height + 16.0));
         // Re-clamp after a shorter collection is restored by diagnostics.
         let clip = self.palette_scroll.contentView();
         let bounds = clip.constrainBoundsRect(clip.bounds());
@@ -690,7 +727,7 @@ impl Inner {
         for (i, c) in palette.iter().enumerate() {
             let button = button(
                 "",
-                rect((i % 5) as f64 * 40.0, (i / 5) as f64 * 36.0, 32.0, 28.0),
+                rect((i % 5) as f64 * 48.0, (i / 5) as f64 * 36.0, 32.0, 28.0),
                 &self.view,
                 sel!(pickSaved:),
                 &format!("Selecionar #{}", color::hex(*c, true)),

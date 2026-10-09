@@ -87,6 +87,10 @@ fn executable_completes_50_capture_copy_export_cleanup_cycles() {
         ("shortcuts-dark.png", (640, 440)),
         ("logs-light.png", (900, 640)),
         ("logs-dark.png", (900, 640)),
+        ("editor-dark-standard.png", (1040, 700)),
+        ("editor-light-standard.png", (1040, 700)),
+        ("editor-dark-compact.png", (760, 450)),
+        ("editor-light-compact.png", (760, 450)),
     ] {
         let bytes = fs::read(output.join(file)).unwrap();
         assert_eq!(&bytes[..8], b"\x89PNG\r\n\x1a\n");

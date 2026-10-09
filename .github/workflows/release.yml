@@ -30,6 +30,7 @@ jobs:
         shell: bash
     env:
       MACOSX_DEPLOYMENT_TARGET: '13.0'
+      RSX_ALLOW_ADHOC: '1'
       RELEASE_TAG: ${{ github.ref_name }}
       BUILD_ARCH: ${{ matrix.arch }}
     steps:
@@ -50,6 +51,7 @@ jobs:
           cargo fmt --check
           cargo clippy --all-targets --locked -- -D warnings
           cargo test --locked
+          python3 -m unittest discover -s tests -p test_signing.py
 
       - name: Build app bundle
         run: bash scripts/bundle.sh

@@ -17,11 +17,11 @@ define_class!(
     impl PreferencesContent {
         #[unsafe(method(drawRect:))]
         fn draw(&self, _dirty: objc2_foundation::NSRect) {
-            NSColor::windowBackgroundColor().setFill();
+            super::ui::color(super::ui::Role::Background).setFill();
             NSBezierPath::bezierPathWithRect(self.bounds()).fill();
-            NSColor::controlBackgroundColor().setFill();
-            for y in [213.0, 101.0] {
-                NSBezierPath::bezierPathWithRoundedRect_xRadius_yRadius(rect(16.0,y,608.0,104.0), 10.0, 10.0).fill();
+            super::ui::color(super::ui::Role::Surface).setFill();
+            for y in [220.0, 96.0] {
+                super::ui::panel(rect(16.5,y,607.0,116.0), 10.0, super::ui::Role::Surface, true);
             }
         }
     }
@@ -83,6 +83,8 @@ define_class!(
             self.error(index, "");
             self.ivars().recording.set(Some(index));
             sender.setTitle(&NSString::from_str("Pressione a combinação…"));
+            self.ivars().errors.borrow()[index].setTextColor(Some(&NSColor::secondaryLabelColor()));
+            self.ivars().errors.borrow()[index].setStringValue(&NSString::from_str("Gravando · Esc cancela; Tab passa ao próximo campo."));
         }
         #[unsafe(method(cancel:))]
         fn cancel(&self, _sender: Option<&objc2::runtime::AnyObject>) {
@@ -151,7 +153,10 @@ impl Preferences {
         if !message.is_empty() {
             crate::telemetry::error("Preferências de atalhos", message);
         }
+        self.ivars().errors.borrow()[index]
+            .setTextColor(Some(&super::ui::color(super::ui::Role::Danger)));
         self.ivars().errors.borrow()[index].setStringValue(&NSString::from_str(message));
+        self.ivars().errors.borrow()[index].setToolTip(Some(&NSString::from_str(message)));
     }
     fn end_recording(&self) {
         if let Some(index) = self.ivars().recording.take() {
@@ -187,6 +192,11 @@ impl Preferences {
             Ok(value) => {
                 self.ivars().values.borrow_mut()[index] = value;
                 self.end_recording();
+                self.ivars().errors.borrow()[index]
+                    .setTextColor(Some(&NSColor::secondaryLabelColor()));
+                self.ivars().errors.borrow()[index].setStringValue(&NSString::from_str(
+                    "Combinação válida · Clique em Aplicar para ativar.",
+                ));
             }
             Err(error) => {
                 self.error(index, &error);
@@ -201,16 +211,9 @@ impl Preferences {
         action: objc2::runtime::Sel,
         frame: objc2_foundation::NSRect,
     ) -> Retained<NSButton> {
-        let button = unsafe {
-            NSButton::buttonWithTitle_target_action(
-                &NSString::from_str(title),
-                Some(self),
-                Some(action),
-                self.mtm(),
-            )
-        };
+        let button = super::ui::button(self.mtm(), title, self, action, frame);
         button.setFrame(frame);
-        button.setBezelStyle(NSBezelStyle::Push);
+        super::ui::style_button(&button);
         self.contentView().unwrap().addSubview(&button);
         button
     }
@@ -235,13 +238,9 @@ fn build(app: &App) -> Retained<Preferences> {
         msg_send![PreferencesContent::alloc(mtm), initWithFrame: rect(0.0,0.0,640.0,440.0)]
     };
     window.setContentView(Some(&content));
-    let title = label(
-        "Seu print, a uma combinação de distância",
-        rect(28.0, 383.0, 584.0, 30.0),
-        mtm,
-    );
-    title.setFont(Some(&NSFont::boldSystemFontOfSize(21.0)));
-    title.setTextColor(Some(&NSColor::labelColor()));
+    let title = label("Atalhos de captura", rect(28.0, 383.0, 584.0, 30.0), mtm);
+    title.setFont(Some(&NSFont::boldSystemFontOfSize(22.0)));
+    title.setTextColor(Some(&super::ui::color(super::ui::Role::Text)));
     content.addSubview(&title);
     content.addSubview(&label(
         "Clique no atalho e pressione as teclas que deseja usar.",
@@ -258,10 +257,10 @@ fn build(app: &App) -> Retained<Preferences> {
     .into_iter()
     .enumerate()
     {
-        let y = 291.0 - i as f64 * 112.0;
+        let y = 294.0 - i as f64 * 124.0;
         let heading = label(title, rect(28.0, y, 270.0, 24.0), mtm);
         heading.setFont(Some(&NSFont::boldSystemFontOfSize(14.0)));
-        heading.setTextColor(Some(&NSColor::labelColor()));
+        heading.setTextColor(Some(&super::ui::color(super::ui::Role::Text)));
         content.addSubview(&heading);
         let description = label(description, rect(28.0, y - 36.0, 310.0, 34.0), mtm);
         description.setMaximumNumberOfLines(2);
@@ -280,18 +279,18 @@ fn build(app: &App) -> Retained<Preferences> {
             "Gravar atalho. Escape cancela; Tab muda de campo.",
         )));
         window.ivars().buttons.borrow_mut().push(button);
-        let error = label("", rect(28.0, y - 75.0, 584.0, 38.0), mtm);
-        error.setMaximumNumberOfLines(3);
+        let error = label("", rect(28.0, y - 70.0, 584.0, 32.0), mtm);
+        error.setMaximumNumberOfLines(2);
         if let Some(cell) = error.cell() {
             cell.setWraps(true);
         }
-        error.setTextColor(Some(&NSColor::systemRedColor()));
+        error.setTextColor(Some(&super::ui::color(super::ui::Role::Danger)));
         content.addSubview(&error);
         window.ivars().errors.borrow_mut().push(error);
     }
     content.addSubview(&label(
         "Use ⌘ com ⇧, ⌥ ou ⌃ e uma letra ou número. Esc cancela a gravação.",
-        rect(28.0, 78.0, 584.0, 22.0),
+        rect(28.0, 70.0, 584.0, 22.0),
         mtm,
     ));
     window.button(
@@ -302,6 +301,7 @@ fn build(app: &App) -> Retained<Preferences> {
     let cancel = window.button("Cancelar", sel!(cancel:), rect(384.0, 23.0, 106.0, 32.0));
     cancel.setKeyEquivalent(&NSString::from_str("\u{1b}"));
     let apply = window.button("Aplicar", sel!(apply:), rect(502.0, 23.0, 110.0, 32.0));
+    super::ui::primary(&apply);
     apply.setKeyEquivalent(&NSString::from_str("\r"));
     window.center();
     window

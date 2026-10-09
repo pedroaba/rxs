@@ -3,9 +3,11 @@ mod color_picker;
 mod diagnostics;
 mod editor;
 mod logs_viewer;
+mod permission;
 mod preferences;
 mod render;
 mod shortcuts;
+mod ui;
 
 use crate::{
     capture::{CaptureBackend, CaptureMode, CaptureOutcome},
@@ -62,7 +64,8 @@ pub struct AppIvars {
     shortcuts: RefCell<Option<shortcuts::Shortcuts>>,
     capturing: Cell<bool>,
     modal: Cell<bool>,
-    screen_access_requested: Cell<bool>,
+    permission_flow: RefCell<permission::PermissionFlow>,
+    screen_access_last: Cell<Option<bool>>,
     diagnostics_mode: bool,
 }
 
@@ -77,6 +80,7 @@ define_class!(
     unsafe impl NSApplicationDelegate for App {
         #[unsafe(method(applicationDidFinishLaunching:))]
         fn did_launch(&self, _notification: &NSNotification) {
+            ui::Theme::load().apply(self.mtm());
             self.install_menus();
             if self.ivars().diagnostics_mode { return; }
             let defaults = NSUserDefaults::standardUserDefaults();
@@ -92,6 +96,10 @@ define_class!(
                     self.show_error("Atalhos indisponíveis", &error);
                 }
             }
+        }
+        #[unsafe(method(applicationDidBecomeActive:))]
+        fn became_active(&self, _notification: &NSNotification) {
+            if !self.ivars().diagnostics_mode { self.check_screen_access(); }
         }
         #[unsafe(method(applicationShouldHandleReopen:hasVisibleWindows:))]
         fn reopen(&self, _app: &NSApplication, _visible: bool) -> bool {
@@ -129,6 +137,7 @@ define_class!(
         #[unsafe(method(windowDidResize:))]
         fn window_did_resize(&self, _notification: &NSNotification) {
             if let Some(editor) = self.editor() {
+                editor.layout();
                 if editor.fit.get() { editor.fit_image(); } else { editor.center_image(); }
             }
         }
@@ -203,7 +212,7 @@ define_class!(
                     let path = url.path().ok_or("O destino precisa ser um arquivo local.")?.to_string();
                     let data = editor.canvas.export()?;
                     atomic_save(std::path::Path::new(&path), unsafe { data.as_bytes_unchecked() })?;
-                    editor.canvas.mark_exported(); editor.refresh();
+                    editor.canvas.mark_exported(); editor.export_feedback("PNG salvo");
                     tracing::info!("image.saved");
                     Ok(())
                 })
@@ -218,8 +227,27 @@ define_class!(
             self.ivars().modal.set(false);
             tracing::info!("preferences.closed");
         }
+        #[unsafe(method(screenPermission:))]
+        fn screen_permission(&self, _sender: Option<&AnyObject>) {
+            if self.ivars().capturing.get() || self.ivars().modal.get() { return; }
+            self.resolve_screen_access(true);
+        }
         #[unsafe(method(quit:))]
         fn quit(&self, _sender: Option<&AnyObject>) { NSApplication::sharedApplication(self.mtm()).terminate(None); }
+        #[unsafe(method(appearance:))]
+        fn appearance(&self, _sender: Option<&AnyObject>) {
+            if self.ivars().capturing.get() || self.ivars().modal.replace(true) { return; }
+            ui::show_appearance(self.mtm());
+            self.ivars().modal.set(false);
+        }
+        #[unsafe(method(validateMenuItem:))]
+        fn validate_menu_item(&self, item: &NSMenuItem) -> bool {
+            let action = item.action();
+            let busy = self.ivars().modal.get() || self.ivars().capturing.get();
+            if [sel!(captureScreen:), sel!(captureRegion:), sel!(captureWindow:), sel!(preferences:), sel!(appearance:), sel!(showLogs:), sel!(screenPermission:), sel!(quit:)].iter().any(|s| action == Some(*s)) { !busy }
+            else if [sel!(showEditor:), sel!(closeEditor:), sel!(saveImage:)].iter().any(|s| action == Some(*s)) { !busy && self.editor().is_some() }
+            else { true }
+        }
         #[unsafe(method(showLogs:))]
         fn show_logs(&self, _sender: Option<&AnyObject>) {
             if self.ivars().capturing.get() || self.ivars().modal.replace(true) { return; }
@@ -239,7 +267,8 @@ impl App {
             shortcuts: RefCell::new(None),
             capturing: Cell::new(false),
             modal: Cell::new(false),
-            screen_access_requested: Cell::new(false),
+            permission_flow: RefCell::new(permission::PermissionFlow::default()),
+            screen_access_last: Cell::new(None),
             diagnostics_mode,
         });
         unsafe { msg_send![super(this), init] }
@@ -328,35 +357,92 @@ impl App {
             });
         });
     }
-    fn screen_access(&self) -> bool {
-        if objc2_core_graphics::CGPreflightScreenCaptureAccess() {
-            return true;
+    fn check_screen_access(&self) -> bool {
+        let granted = objc2_core_graphics::CGPreflightScreenCaptureAccess();
+        if self.ivars().screen_access_last.replace(Some(granted)) != Some(granted) {
+            tracing::info!(granted, "capture.permission_status");
         }
-        self.ivars().modal.set(true);
-        let granted = if self.ivars().screen_access_requested.replace(true) {
-            false
-        } else {
-            objc2_core_graphics::CGRequestScreenCaptureAccess()
-        };
-        if !granted {
-            tracing::warn!("capture.permission_denied");
-            let choice = alert(
-                self.mtm(),
-                "Reabra o RSX após autorizar",
-                "Autorize o RSX em Ajustes do Sistema → Privacidade e Segurança → Gravação de Tela. O macOS pode só aplicar essa alteração depois que o app é encerrado.\n\nSe o RSX já estiver ativado na lista, desative e ative novamente. Se ainda não funcionar, remova a entrada antiga e adicione a cópia do RSX que você está usando.",
-                &["Abrir Ajustes e encerrar RSX", "Agora não"],
-            );
-            if choice == 1000 {
-                open_settings(
-                    "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
+        if let Some(button) = self
+            .ivars()
+            .status
+            .borrow()
+            .as_ref()
+            .and_then(|status| status.button(self.mtm()))
+        {
+            button.setToolTip(Some(&NSString::from_str(if granted {
+                "RSX — Capturas de tela"
+            } else {
+                "RSX — Captura bloqueada. Abra Permissão de captura… no menu."
+            })));
+        }
+        granted
+    }
+    fn screen_access(&self) -> bool {
+        self.resolve_screen_access(false)
+    }
+    fn request_screen_access(&self) -> bool {
+        // This records an attempt, never an authorization. Persist before the OS dialog.
+        NSUserDefaults::standardUserDefaults().setBool_forKey(
+            true,
+            &NSString::from_str("screenCapturePermissionRequested"),
+        );
+        tracing::info!("capture.permission_requested");
+        let requested = objc2_core_graphics::CGRequestScreenCaptureAccess();
+        let granted = self.check_screen_access();
+        tracing::info!(requested, granted, "capture.permission_request_finished");
+        granted
+    }
+    fn resolve_screen_access(&self, explicit: bool) -> bool {
+        let granted = self.check_screen_access();
+        let requested = NSUserDefaults::standardUserDefaults()
+            .boolForKey(&NSString::from_str("screenCapturePermissionRequested"));
+        let decision = self
+            .ivars()
+            .permission_flow
+            .borrow_mut()
+            .decide(granted, requested, explicit);
+        if decision == permission::Decision::Capture {
+            if explicit {
+                self.ivars().modal.set(true);
+                alert(
+                    self.mtm(),
+                    "Captura autorizada",
+                    "O RSX já tem acesso à tela. Você pode capturar pelo menu ou pelos atalhos.",
+                    &["Fechar"],
                 );
                 self.ivars().modal.set(false);
-                NSApplication::sharedApplication(self.mtm()).terminate(None);
-                return false;
             }
+            return true;
+        }
+        tracing::warn!("capture.permission_blocked");
+        if decision == permission::Decision::Block {
+            return false;
+        }
+        self.ivars().modal.set(true);
+        if decision == permission::Decision::Request && self.request_screen_access() {
+            self.ivars().modal.set(false);
+            return true;
+        }
+        let buttons: &[&str] = if explicit {
+            &["Abrir Ajustes", "Solicitar acesso", "Fechar"]
+        } else {
+            &["Abrir Ajustes", "Agora não"]
+        };
+        let choice = alert(self.mtm(), "Autorize a captura de tela", "Ative o RSX em Ajustes do Sistema → Privacidade e Segurança → Gravação de Tela.
+
+Se o RSX já estiver ativado após migrar uma versão antiga, desative e ative somente o RSX nessa lista. Depois encerre e reabra o app. Se necessário, remova a entrada antiga e adicione /Applications/RSX.app. Suas alterações no editor não serão descartadas automaticamente.
+
+Você pode consultar esse estado em “Permissão de captura…” no menu.", buttons);
+        if choice == 1000 {
+            open_settings(
+                "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
+            );
+        } else if explicit && choice == 1001 {
+            self.request_screen_access();
         }
         self.ivars().modal.set(false);
-        granted
+        // An explicit recovery action never starts an unsolicited capture.
+        false
     }
     fn finish_capture(&self, outcome: CaptureOutcome) {
         self.ivars().capturing.set(false);
@@ -453,6 +539,13 @@ impl App {
         let app_menu = NSMenu::new(mtm);
         app_menu.setTitle(&NSString::from_str("RSX"));
         self.item(&app_menu, "Atalhos…", sel!(preferences:), ",", false);
+        self.item(
+            &app_menu,
+            "Permissão de captura…",
+            sel!(screenPermission:),
+            "",
+            false,
+        );
         self.item(&app_menu, "Ver logs…", sel!(showLogs:), "", false);
         self.item(&app_menu, "Sair do RSX", sel!(quit:), "q", false);
         root.setSubmenu(Some(&app_menu));
@@ -509,7 +602,17 @@ impl App {
         self.item(&menu, "Capturar janela…", sel!(captureWindow:), "", false);
         menu.addItem(&NSMenuItem::separatorItem(mtm));
         self.item(&menu, "Mostrar editor", sel!(showEditor:), "", false);
+        menu.addItem(&NSMenuItem::separatorItem(mtm));
+        self.item(&menu, "Aparência…", sel!(appearance:), "", false);
         self.item(&menu, "Atalhos…", sel!(preferences:), "", false);
+        self.item(
+            &menu,
+            "Permissão de captura…",
+            sel!(screenPermission:),
+            "",
+            false,
+        );
+        menu.addItem(&NSMenuItem::separatorItem(mtm));
         self.item(&menu, "Ver logs…", sel!(showLogs:), "", false);
         menu.addItem(&NSMenuItem::separatorItem(mtm));
         self.item(&menu, "Sair do RSX", sel!(quit:), "", false);
@@ -598,9 +701,12 @@ pub fn run() {
             return;
         }
     };
-    let diagnostics_mode = args
-        .iter()
-        .any(|arg| arg == "--diagnostics" || arg == "--demo");
+    let diagnostics_mode = args.iter().any(|arg| {
+        arg == "--diagnostics"
+            || arg == "--demo"
+            || arg == "--ui-diagnostics"
+            || arg == "--capture-access-diagnostics"
+    });
     let delegate = App::new(mtm, session, diagnostics_mode);
     application.setDelegate(Some(ProtocolObject::from_ref(&*delegate)));
     APP.with(|slot| *slot.borrow_mut() = Some(delegate.clone()));
@@ -628,8 +734,63 @@ pub fn run() {
     }));
     if diagnostics_mode {
         let demo = args.iter().any(|arg| arg == "--demo");
-        DispatchQueue::main().exec_async(move || with_app(|app| diagnostics::run(app, demo)));
+        let ui_only = args.iter().any(|arg| arg == "--ui-diagnostics");
+        let access_output = args
+            .iter()
+            .position(|arg| arg == "--capture-access-diagnostics")
+            .map(|index| {
+                std::path::PathBuf::from(
+                    args.get(index + 1)
+                        .expect("--capture-access-diagnostics requires an output JSON path"),
+                )
+            });
+        DispatchQueue::main().exec_async(move || {
+            with_app(|app| {
+                if let Some(output) = access_output {
+                    verify_capture_access(app, &output);
+                } else {
+                    diagnostics::run(app, demo, ui_only);
+                }
+            })
+        });
     }
     application.run();
     APP.with(|slot| slot.borrow_mut().take());
+}
+
+/// Explicit real-screen probe, launched from the installed bundle. It never
+/// requests access or saves image content, and deletes each temporary capture.
+fn verify_capture_access(app: &App, output: &std::path::Path) {
+    let granted = app.check_screen_access();
+    let mut results = Vec::new();
+    if granted {
+        let backend = MacCapture {
+            root: app.ivars().session.root.clone(),
+        };
+        for _ in 0..2 {
+            let result = autoreleasepool(|_| match backend.capture(CaptureMode::Screen) {
+                CaptureOutcome::Success(artifact) => {
+                    match render::NativeImage::load(&artifact.path) {
+                        Ok(image) => {
+                            serde_json::json!({"status":"success", "width":image.width, "height":image.height})
+                        }
+                        Err(error) => serde_json::json!({"status":"error", "error":error}),
+                    }
+                }
+                CaptureOutcome::Cancelled => serde_json::json!({"status":"cancelled"}),
+                CaptureOutcome::Error(error) => {
+                    serde_json::json!({"status":"error", "error":error})
+                }
+            });
+            results.push(result);
+        }
+    }
+    let report = serde_json::json!({"granted":granted, "permission_requests":0, "captures":results, "executable":std::env::current_exe().ok()});
+    let saved = serde_json::to_vec_pretty(&report)
+        .map_err(|error| error.to_string())
+        .and_then(|bytes| atomic_save(output, &bytes));
+    if let Err(error) = saved {
+        crate::telemetry::error("Diagnóstico de acesso", &error);
+    }
+    NSApplication::sharedApplication(app.mtm()).terminate(None);
 }

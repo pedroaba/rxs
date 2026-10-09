@@ -135,6 +135,7 @@ fn annotate(editor: &Editor) {
 }
 
 fn verify(editor: &Editor, output: &std::path::Path) -> Result<(), String> {
+    editor.snapshots(output)?;
     let many = editor
         .color_picker_many_snapshot()
         .ok_or("palette overflow snapshot")?;
@@ -204,6 +205,21 @@ fn verify(editor: &Editor, output: &std::path::Path) -> Result<(), String> {
     let pasteboard = NSPasteboard::pasteboardWithUniqueName();
     editor.copy_to(&pasteboard)?;
     assert!(!editor.canvas.needs_export());
+    assert_eq!(editor.status.stringValue().to_string(), "Imagem copiada");
+    editor.set_zoom(0.25);
+    assert_eq!(editor.status.stringValue().to_string(), "Imagem copiada");
+    editor.export_feedback("PNG salvo");
+    assert_eq!(editor.status.stringValue().to_string(), "PNG salvo");
+    editor.canvas.ivars().document.borrow_mut().undo();
+    editor.refresh();
+    assert_eq!(
+        editor.status.stringValue().to_string(),
+        "Alterações não exportadas"
+    );
+    assert!(editor.canvas.needs_export());
+    editor.canvas.ivars().document.borrow_mut().redo();
+    editor.refresh();
+    assert!(!editor.canvas.needs_export());
     let readback = pasteboard
         .dataForType(unsafe { NSPasteboardTypePNG })
         .ok_or("clipboard readback failed")?;
@@ -221,7 +237,7 @@ fn verify(editor: &Editor, output: &std::path::Path) -> Result<(), String> {
     Ok(())
 }
 
-pub fn run(app: &App, demo: bool) {
+pub fn run(app: &App, demo: bool, ui_only: bool) {
     let mut rows = vec!["phase,physical_footprint_mb,resident_mb".into()];
     record(&mut rows, "idle_start");
     let output = std::env::var_os("RSX_DIAGNOSTICS_DIR")
@@ -229,17 +245,27 @@ pub fn run(app: &App, demo: bool) {
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("target/diagnostics"));
     fs::create_dir_all(&output).expect("create diagnostics output");
+    super::ui::verify(app.mtm(), &output);
     super::logs_viewer::verify(app.mtm(), &output);
     super::preferences::verify(app, &output);
     let fixture = autoreleasepool(|_| fixture(app)).expect("create 4K fixture");
     let fixture_path = output.join("source-4k.png");
     fs::copy(&fixture.path, &fixture_path).expect("save fixture");
     drop(fixture);
-    if demo {
+    if demo || ui_only {
         let artifact = copy_fixture(app, &fixture_path);
         app.finish_capture(CaptureOutcome::Success(artifact));
         annotate(&app.editor().unwrap());
-        println!("RSX demo opened; synthetic 3840×2160 image.");
+        if ui_only {
+            let editor = app.editor().unwrap();
+            editor.verify_editor_layout();
+            verify(&editor, &output).expect("UI diagnostics");
+            app.close_editor();
+            println!("UI checks passed. Previews: {}", output.display());
+            NSApplication::sharedApplication(app.mtm()).terminate(None);
+        } else {
+            println!("RSX demo opened; synthetic 3840×2160 image.");
+        }
     } else {
         cycle(0, rows, output, fixture_path);
     }
@@ -324,7 +350,7 @@ fn cycle(index: usize, mut rows: Vec<String>, output: PathBuf, source: PathBuf) 
                 later(2000, move || {
                     record(&mut rows, "idle_settled");
                     fs::write(output.join("memory.csv"), rows.join("\n") + "\n").unwrap();
-                    fs::write(output.join("native-checks.txt"), "PASS: centered image at fit/10%/25%/100% and resized viewport, floating color picker open/close without viewport changes, RGBA propagation, editor activation policy, 3840×2160 export, top/bottom orientation, transparency, annotation pixel coordinates, private clipboard PNG roundtrip, 50 editor/export/close cycles, zero retained canvases and zero temporary captures after each close.\n").unwrap();
+                    fs::write(output.join("native-checks.txt"), "PASS: custom button action dispatch, theme inheritance and preview cancellation, adaptive toolbar at 760/959/960/1040/1440 points, copy/save feedback and pending edits, log selection preservation and empty/error states, centered image at fit/10%/25%/100% and resized viewport, floating color picker open/close without viewport changes, RGBA propagation, editor activation policy, 3840×2160 export, top/bottom orientation, transparency, annotation pixel coordinates, private clipboard PNG roundtrip, 50 editor/export/close cycles, zero retained canvases and zero temporary captures after each close.\n").unwrap();
                     if let Ok(map) = std::process::Command::new("/usr/bin/vmmap")
                         .args(["-summary", &std::process::id().to_string()])
                         .output()
