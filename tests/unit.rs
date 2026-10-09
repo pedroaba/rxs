@@ -1,4 +1,4 @@
-//! Import the real modules because RXS currently has only a binary target.
+//! Import the real modules because RSX currently has only a binary target.
 //! No production visibility or behavior changes are needed for these tests.
 #[allow(dead_code)]
 #[path = "../src/document.rs"]

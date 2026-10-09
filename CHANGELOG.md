@@ -1,5 +1,12 @@
 # Changelog
 
+## Não lançado
+
+- Aplicativo renomeado para RSX, mantendo o identificador do macOS e a compatibilidade das configurações anteriores.
+- Logs e traces com OpenTelemetry salvos apenas localmente, com permissões privadas, rotação, retenção e backtraces de panics.
+- Janela nativa “Ver logs…” com filtros, busca, atualização e leitura do histórico anterior à renomeação.
+- Diagnósticos da janela de logs nas aparências clara e escura, incluindo fechamento sem travar a fila principal do macOS.
+
 ## 0.3.0
 
 - Solicitação de Gravação de Tela limitada a uma vez por execução, evitando pedidos nativos repetidos ao usar o atalho.

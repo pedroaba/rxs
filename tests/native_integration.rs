@@ -27,11 +27,11 @@ fn executable_completes_50_capture_copy_export_cleanup_cycles() {
     fs::create_dir(&temporary).unwrap();
     let log_path = root.path().join("process.log");
     let log = fs::File::create(&log_path).unwrap();
-    let child = Command::new(env!("CARGO_BIN_EXE_rxs"))
+    let child = Command::new(env!("CARGO_BIN_EXE_rsx"))
         .arg("--diagnostics")
-        // Isolate session cleanup and locking from any real RXS instance.
+        // Isolate session cleanup and locking from any real RSX instance.
         .env("TMPDIR", &temporary)
-        .env("RXS_DIAGNOSTICS_DIR", &output)
+        .env("RSX_DIAGNOSTICS_DIR", &output)
         .current_dir(root.path())
         .stdin(Stdio::null())
         .stdout(log.try_clone().unwrap())
@@ -85,6 +85,8 @@ fn executable_completes_50_capture_copy_export_cleanup_cycles() {
         ("annotated-4k.png", (3840, 2160)),
         ("shortcuts-light.png", (640, 440)),
         ("shortcuts-dark.png", (640, 440)),
+        ("logs-light.png", (900, 640)),
+        ("logs-dark.png", (900, 640)),
     ] {
         let bytes = fs::read(output.join(file)).unwrap();
         assert_eq!(&bytes[..8], b"\x89PNG\r\n\x1a\n");
@@ -152,7 +154,7 @@ impl CompetingRegistrations {
                 code.into(),
                 256 | 512 | 2048 | 4096,
                 TestHotKeyId {
-                    signature: u32::from_be_bytes(*b"rxst"),
+                    signature: u32::from_be_bytes(*b"rsxt"),
                     id: key.id(),
                 },
                 GetApplicationEventTarget(),

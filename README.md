@@ -1,5 +1,5 @@
 <p align="center">
-  <strong>RXS</strong><br>
+  <strong>RSX</strong><br>
   Capture. Anote. Compartilhe.<br>
   Screenshots e anotações nativas para macOS, feitos em Rust.
 </p>
@@ -11,13 +11,13 @@
   <img alt="Versão 0.1.0" src="https://img.shields.io/badge/version-0.1.0-5865F2">
 </p>
 
-RXS fica na barra de menus e abre um editor sob demanda para destacar o que importa em uma captura. A interface usa **AppKit e Core Graphics**, sem WebView, e a exportação preserva a resolução original da imagem.
+RSX fica na barra de menus e abre um editor sob demanda para destacar o que importa em uma captura. A interface usa **AppKit e Core Graphics**, sem WebView, e a exportação preserva a resolução original da imagem.
 
 [Recursos](#recursos) · [Compatibilidade](#compatibilidade) · [Instalação](#compilar-e-instalar) · [Atalhos](#atalhos-em-um-relance) · [Desenvolvimento](#testar) · [Validação](validation/README.md)
 
 ## Veja o resultado
 
-![Antes e depois das anotações do RXS em uma imagem sintética](docs/assets/annotation-demo.gif)
+![Antes e depois das anotações do RSX em uma imagem sintética](docs/assets/annotation-demo.gif)
 
 *GIF alternando a imagem sintética original e o PNG produzido pelo diagnóstico nativo. Demonstra o resultado das ferramentas; não é uma gravação da interface nem de uma captura real. Os marcadores nos cantos verificam orientação e transparência.*
 
@@ -30,7 +30,7 @@ RXS fica na barra de menus e abre um editor sob demanda para destacar o que impo
 
 ## Recursos
 
-| Recurso | O que o RXS oferece |
+| Recurso | O que o RSX oferece |
 | --- | --- |
 | Captura nativa | Tela principal, região e janela pelo seletor do macOS |
 | Anotações | Seta, retângulo sem preenchimento e desenho livre |
@@ -76,10 +76,10 @@ Requisitos: macOS 13+, Rust 1.88+ e Command Line Tools da Apple (`xcode-select -
 git clone https://github.com/pedroaba/rxs.git
 cd rxs
 bash scripts/bundle.sh
-open dist/RXS.app
+open dist/RSX.app
 ```
 
-O pacote fica em `dist/RXS.app`. Para uso diário, mova-o para `/Applications` ou `~/Applications` e abra dessa localização. Por padrão, o script cria uma assinatura ad-hoc para uso local. Como a identidade dessa assinatura muda junto com o executável, o macOS pode pedir novamente permissões de privacidade depois de cada recompilação ou atualização. Para assinar com uma identidade Developer ID disponível no Chaves e preservar a identidade do app entre versões, use `RXS_CODESIGN_IDENTITY="Developer ID Application: Seu Nome (TEAMID)" bash scripts/bundle.sh`. Distribuição pública também requer notarização. O script compila para a arquitetura do Mac atual. A validação inicial é em Apple Silicon; Intel ainda precisa de validação própria.
+O pacote fica em `dist/RSX.app`. Para uso diário, mova-o para `/Applications` ou `~/Applications` e abra dessa localização. Por padrão, o script cria uma assinatura ad-hoc para uso local. Como a identidade dessa assinatura muda junto com o executável, o macOS pode pedir novamente permissões de privacidade depois de cada recompilação ou atualização. Para assinar com uma identidade Developer ID disponível no Chaves e preservar a identidade do app entre versões, use `RSX_CODESIGN_IDENTITY="Developer ID Application: Seu Nome (TEAMID)" bash scripts/bundle.sh`. Distribuição pública também requer notarização. O script compila para a arquitetura do Mac atual. A validação inicial é em Apple Silicon; Intel ainda precisa de validação própria.
 
 ## Builds automáticos e releases
 
@@ -87,21 +87,21 @@ O [workflow de release](.github/workflows/release.yml) é acionado ao enviar uma
 
 Os downloads ficam em [Releases](https://github.com/pedroaba/rxs/releases):
 
-- `RXS-vX.Y.Z-macos-arm64.zip`: Macs com chip Apple Silicon.
-- `RXS-vX.Y.Z-macos-x86_64.zip`: Macs Intel.
+- `RSX-vX.Y.Z-macos-arm64.zip`: Macs com chip Apple Silicon.
+- `RSX-vX.Y.Z-macos-x86_64.zip`: Macs Intel.
 - Um arquivo `.sha256` para conferir cada ZIP.
 
-Descompacte o ZIP da sua arquitetura e arraste **RXS.app** para **Aplicativos**. Os pacotes têm assinatura ad-hoc, **sem notarização da Apple**; o macOS pode bloquear a primeira abertura. Se você confia na origem do download, use **Ajustes do Sistema → Privacidade e Segurança → Abrir Mesmo Assim** após tentar abrir o app.
+Descompacte o ZIP da sua arquitetura e arraste **RSX.app** para **Aplicativos**. Os pacotes têm assinatura ad-hoc, **sem notarização da Apple**; o macOS pode bloquear a primeira abertura. Se você confia na origem do download, use **Ajustes do Sistema → Privacidade e Segurança → Abrir Mesmo Assim** após tentar abrir o app.
 
 ### Publicar uma versão
 
-1. Atualize `version` em `Cargo.toml` e o registro do pacote `rxs` em `Cargo.lock` (execute `cargo check` para atualizar o lockfile).
+1. Atualize `version` em `Cargo.toml` e o registro do pacote `rsx` em `Cargo.lock` (execute `cargo check` para atualizar o lockfile).
 2. Atualize `CFBundleShortVersionString` em `packaging/Info.plist` para a versão numérica correspondente e incremente `CFBundleVersion`. Para `0.2.0-rc.1`, a versão curta do bundle deve ser `0.2.0`.
 3. Faça commit e envie as alterações, incluindo o workflow, para o GitHub.
 4. Crie e envie a tag correspondente. Por exemplo, para a versão atual `0.1.0`:
 
 ```sh
-git tag -a v0.1.0 -m "RXS 0.1.0"
+git tag -a v0.1.0 -m "RSX 0.1.0"
 git push origin v0.1.0
 ```
 
@@ -111,17 +111,17 @@ Acompanhe a execução em [Actions](https://github.com/pedroaba/rxs/actions/work
 
 ## Primeiro uso e captura
 
-1. Abra o RXS e encontre o ícone de enquadramento na barra de menus.
-2. Para manter as teclas habituais, abra **Ajustes do Sistema → Teclado → Atalhos de Teclado → Capturas de Tela** e desative as ações do sistema que usam **Command+Shift+3** e **Command+Shift+4**. Preserve **Command+Shift+5**. O RXS não altera essas configurações automaticamente.
-3. No menu do RXS, escolha **Atalhos…**, clique no controle da captura e pressione a combinação desejada. Clique em **Aplicar** para ativar. **Esc** cancela a gravação; **Tab** passa ao próximo controle. Se preferir, use `Command+Option+3` e `Command+Option+4` ou outras combinações com Command e Shift/Option/Control mais uma letra/número.
+1. Abra o RSX e encontre o ícone de enquadramento na barra de menus.
+2. Para manter as teclas habituais, abra **Ajustes do Sistema → Teclado → Atalhos de Teclado → Capturas de Tela** e desative as ações do sistema que usam **Command+Shift+3** e **Command+Shift+4**. Preserve **Command+Shift+5**. O RSX não altera essas configurações automaticamente.
+3. No menu do RSX, escolha **Atalhos…**, clique no controle da captura e pressione a combinação desejada. Clique em **Aplicar** para ativar. **Esc** cancela a gravação; **Tab** passa ao próximo controle. Se preferir, use `Command+Option+3` e `Command+Option+4` ou outras combinações com Command e Shift/Option/Control mais uma letra/número.
 4. **Command+Shift+3** captura a tela principal. **Command+Shift+4** abre a seleção nativa: arraste uma região ou pressione espaço para escolher uma janela. **Escape** cancela. As mesmas ações estão no menu, incluindo captura direta de janela.
-5. Se o macOS pedir permissão, autorize o RXS em **Privacidade e Segurança → Gravação de Tela** (o nome pode incluir áudio, conforme a versão do macOS), encerre o RXS e abra-o novamente. Se a chave já estiver ligada, desligue e ligue outra vez. Em builds ad-hoc atualizados, remova a entrada antiga e adicione a cópia atual do app.
+5. Se o macOS pedir permissão, autorize o RSX em **Privacidade e Segurança → Gravação de Tela** (o nome pode incluir áudio, conforme a versão do macOS), encerre o RSX e abra-o novamente. Se a chave já estiver ligada, desligue e ligue outra vez. Em builds ad-hoc atualizados, remova a entrada antiga e adicione a cópia atual do app.
 
 O app verifica conflitos com atalhos do sistema e erros de registro. Ao alterar configurações no macOS, volte a **Atalhos… → Aplicar**. Os atalhos não são ativados antes dessa configuração. O atalho de tela inteira captura o monitor principal; região/janela podem ser selecionadas nos demais monitores. Se você mantiver Control pressionado no seletor nativo, o macOS pode enviar a captura diretamente ao clipboard, sem abrir o editor.
 
-Toda captura concluída pelo RXS é copiada automaticamente em PNG e aberta no editor. O aviso **Imagem copiada** confirma o sucesso; depois de anotar, use **Copiar ⌘C** para atualizar o clipboard. Cancelar a captura não altera o clipboard.
+Toda captura concluída pelo RSX é copiada automaticamente em PNG e aberta no editor. O aviso **Imagem copiada** confirma o sucesso; depois de anotar, use **Copiar ⌘C** para atualizar o clipboard. Cancelar a captura não altera o clipboard.
 
-Na janela de atalhos, conflitos aparecem junto ao controle. Os atalhos do RXS ficam temporariamente pausados enquanto você grava uma combinação; **Cancelar** mantém a configuração anterior. Os atalhos **⌘C** e **⌘S** do editor são fixos.
+Na janela de atalhos, conflitos aparecem junto ao controle. Os atalhos do RSX ficam temporariamente pausados enquanto você grava uma combinação; **Cancelar** mantém a configuração anterior. Os atalhos **⌘C** e **⌘S** do editor são fixos.
 
 ## Atalhos em um relance
 
@@ -134,7 +134,7 @@ Na janela de atalhos, conflitos aparecem junto ao controle. Os atalhos do RXS fi
 | Copiar PNG | `⌘C` |
 | Salvar PNG | `⌘S` |
 
-Os atalhos de captura precisam ser ativados em **Atalhos…** no menu do RXS. Também é possível usar as ações do menu sem configurar atalhos.
+Os atalhos de captura precisam ser ativados em **Atalhos…** no menu do RSX. Também é possível usar as ações do menu sem configurar atalhos.
 
 ## Anotar e exportar
 
@@ -146,8 +146,8 @@ Os atalhos de captura precisam ser ativados em **Atalhos…** no menu do RXS. Ta
 - Fechar ou substituir uma imagem ainda não exportada pede confirmação. Copiar ou salvar marca a versão atual como exportada; desenhar novamente volta a marcar como pendente.
 - Imagens menores ficam centralizadas horizontal e verticalmente, inclusive ao ajustar o zoom ou redimensionar a janela.
 - A captura usa o som nativo de screenshot do macOS, respeitando o volume do sistema.
-- Enquanto o editor está aberto, o RXS aparece no Dock e no Command+Tab.
-- Fechar o editor libera a imagem e remove seu arquivo temporário. O app continua na barra de menus. **Sair do RXS** encerra o processo.
+- Enquanto o editor está aberto, o RSX aparece no Dock e no Command+Tab.
+- Fechar o editor libera a imagem e remove seu arquivo temporário. O app continua na barra de menus. **Sair do RSX** encerra o processo.
 
 ## Organização
 
@@ -164,10 +164,10 @@ cargo test --locked
 cargo clippy --all-targets --locked -- -D warnings
 cargo fmt --check
 bash scripts/bundle.sh
-dist/RXS.app/Contents/MacOS/rxs --diagnostics
+dist/RSX.app/Contents/MacOS/rsx --diagnostics
 ```
 
-Feche outra instância do RXS antes do diagnóstico. O modo `--diagnostics` gera uma imagem sintética 4K, valida orientação, transparência, coordenadas das anotações e roundtrip PNG em um clipboard privado. Também verifica a cópia automática e o estado de exportação, exercita o cancelamento da gravação de atalhos e gera imagens da janela de atalhos nas aparências clara e escura. Abre/exporta/fecha o editor 50 vezes e termina. Não captura sua tela, altera atalhos nem substitui o clipboard normal. Os arquivos ficam em `target/diagnostics/`; personalize com `RXS_DIAGNOSTICS_DIR`.
+Feche outra instância do RSX antes do diagnóstico. O modo `--diagnostics` gera uma imagem sintética 4K, valida orientação, transparência, coordenadas das anotações e roundtrip PNG em um clipboard privado. Também verifica a cópia automática e o estado de exportação, exercita o cancelamento da gravação de atalhos e gera imagens da janela de atalhos nas aparências clara e escura. Abre/exporta/fecha o editor 50 vezes e termina. Não captura sua tela, altera atalhos nem substitui o clipboard normal. Os arquivos ficam em `target/diagnostics/`; personalize com `RSX_DIAGNOSTICS_DIR`.
 
 `--demo` abre uma imagem sintética no editor para inspeção manual, sem configurar atalhos. Este modo não cria uma captura real.
 
@@ -185,9 +185,9 @@ As conversões e a serialização da paleta ficam em `src/color.rs`, sem depend�
 
 ## Perguntas frequentes
 
-**O RXS envia minhas capturas para algum servidor?** Não há upload, sincronização ou telemetria implementados. As capturas temporárias são removidas ao fechar o editor; arquivos exportados ficam no destino que você escolheu.
+**O RSX envia minhas capturas para algum servidor?** Não há upload ou sincronização. A telemetria é salva exclusivamente em arquivos locais. As capturas temporárias são removidas ao fechar o editor; arquivos exportados ficam no destino que você escolheu.
 
-**Posso experimentar sem capturar a tela?** Sim. Depois de compilar, execute `dist/RXS.app/Contents/MacOS/rxs --demo` para abrir uma imagem sintética no editor.
+**Posso experimentar sem capturar a tela?** Sim. Depois de compilar, execute `dist/RSX.app/Contents/MacOS/rsx --demo` para abrir uma imagem sintética no editor.
 
 **Por que meu atalho não funciona?** Confira se a combinação ainda está reservada pelo macOS e reaplique a configuração em **Atalhos…**. Veja também a permissão de Gravação de Tela nas configurações do sistema.
 
@@ -202,3 +202,56 @@ Para contribuir com código, crie um fork, faça uma alteração focada e execut
 ## Licença
 
 Distribuído sob a [licença MIT](LICENSE).
+
+## Telemetria local (OpenTelemetry)
+
+O RSX registra logs estruturados e traces das operações usando o SDK do
+OpenTelemetry. Os exportadores gravam exclusivamente em arquivos JSON Lines em
+`~/Library/Logs/RSX/`; não existe servidor, endpoint HTTP, coletor ou envio pela
+rede, mesmo que variáveis `OTEL_EXPORTER_OTLP_*` estejam configuradas.
+
+Cada execução cria `rsx-<timestamp>-<pid>.jsonl`. O arquivo gira ao atingir cerca
+de 5 MiB, mantendo até três backups (`.1`, `.2`, `.3`) por execução. Arquivos de
+telemetria com mais de sete dias são removidos na próxima inicialização. A pasta
+usa permissão `0700` e os arquivos `0600`; uma pasta pública ou link simbólico é
+recusado. Para encontrar os arquivos no Finder, use **Ir → Ir para a pasta…** e
+cole `~/Library/Logs/RSX`.
+
+Os registros incluem inicialização/encerramento, captura solicitada, sucesso,
+cancelamento, permissão negada, erros apresentados pela interface, atalhos,
+exportação PNG, cópia, salvamento e eventos do editor. Traces têm início, fim,
+duração e status; logs dentro de uma operação incluem `trace_id` e `span_id`
+para correlacionar falhas. A captura propaga o contexto entre a thread de captura
+e a interface. Panics do Rust registram mensagem, localização e backtrace,
+inclusive no build release com `panic = "abort"`. Falhas nativas sem panic do
+Rust (por exemplo SIGKILL ou uma exceção do sistema) não passam pelo panic hook.
+
+Para consultar os registros no aplicativo, clique no ícone do RSX na barra de
+menus e escolha **Ver logs…**. A janela mostra data e hora local, tipo, mensagem,
+detalhes do erro, duração e IDs de correlação, com os eventos mais recentes
+primeiro. Use **Todos**, **Erros**, **Avisos** ou **Operações** para filtrar;
+digite um termo e pressione Enter ou **Buscar** para pesquisar mensagens,
+atributos e IDs. **Atualizar** recarrega os arquivos e **Abrir pasta de logs**
+mostra a pasta no Finder. O texto pode ser selecionado e copiado.
+
+A consulta inclui arquivos atuais, backups de rotação e registros legados em
+`~/Library/Logs/RXS`. Para limitar memória e tempo de leitura, a janela consulta
+até os 12 arquivos mais recentes, lê até 2 MiB do final de cada um e mostra até
+1.000 registros. Um aviso informa quando o histórico foi limitado; os arquivos
+completos continuam disponíveis na pasta. Linhas inválidas são contabilizadas
+e ignoradas; um registro ainda em gravação aparece após a próxima atualização.
+A janela é nativa e somente de leitura, sem disponibilizar os logs na web.
+
+Imagens, pixels e conteúdo do clipboard não são registrados. Mensagens de erro
+e backtraces podem conter caminhos locais; trate os arquivos como diagnósticos
+privados. Se a inicialização ou gravação dos logs falhar, o RSX continua e
+informa a falha no stderr. A gravação é síncrona, sem fila em memória, e cada
+registro é descarregado para o sistema operacional, reduzindo a perda de eventos
+em panics; não garante persistência em caso de perda de energia.
+
+Os testes em `src/telemetry.rs` verificam exportação real pelo SDK, correlação de
+logs/traces, status de erro, rotação, JSON válido e permissões privadas:
+
+```sh
+cargo test --locked
+```

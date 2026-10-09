@@ -16,6 +16,7 @@ pub struct Session {
 
 impl Session {
     pub fn open() -> Result<Self, String> {
+        let _operation = crate::telemetry::Operation::start("session.open");
         // A private root plus an advisory lock prevents one instance deleting
         // another instance's captures. Never follow a substituted root symlink.
         let uid = unsafe { libc::getuid() };
@@ -30,7 +31,7 @@ impl Session {
         let metadata = fs::symlink_metadata(&root).map_err(|e| e.to_string())?;
         if !metadata.is_dir() || metadata.uid() != uid || metadata.mode() & 0o077 != 0 {
             return Err(
-                "A pasta temporária do RXS não é privada ou tem proprietário incorreto.".into(),
+                "A pasta temporária do RSX não é privada ou tem proprietário incorreto.".into(),
             );
         }
         let lock = OpenOptions::new()
@@ -43,7 +44,7 @@ impl Session {
             .open(root.join("instance.lock"))
             .map_err(|e| e.to_string())?;
         if unsafe { libc::flock(lock.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0 {
-            return Err("O RXS já está aberto. Use seu ícone na barra de menus.".into());
+            return Err("O RSX já está aberto. Use seu ícone na barra de menus.".into());
         }
         for entry in fs::read_dir(&root).map_err(|e| e.to_string())?.flatten() {
             if entry.file_name().to_string_lossy().starts_with("session-")
@@ -63,6 +64,8 @@ pub struct MacCapture {
 
 impl CaptureBackend for MacCapture {
     fn capture(&self, mode: CaptureMode) -> CaptureOutcome {
+        let _operation = crate::telemetry::Operation::start("capture.native");
+        tracing::info!(mode = ?mode, "capture.native_started");
         let directory = match tempfile::Builder::new()
             .prefix("session-")
             .tempdir_in(&self.root)
@@ -97,6 +100,7 @@ impl CaptureBackend for MacCapture {
                 CaptureOutcome::Cancelled
             }
             Ok(output) => {
+                tracing::warn!(exit_code = ?output.status.code(), "capture.native_unsuccessful");
                 let message = String::from_utf8_lossy(&output.stderr);
                 // Escape is reported as an unsuccessful interactive capture on some OS versions.
                 if message.to_lowercase().contains("cancel")

@@ -148,6 +148,9 @@ fn modifier_symbols(mods: Modifiers) -> String {
 }
 impl Preferences {
     fn error(&self, index: usize, message: &str) {
+        if !message.is_empty() {
+            crate::telemetry::error("Preferências de atalhos", message);
+        }
         self.ivars().errors.borrow()[index].setStringValue(&NSString::from_str(message));
     }
     fn end_recording(&self) {

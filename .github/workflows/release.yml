@@ -57,24 +57,24 @@ jobs:
       - name: Package and verify app
         run: |
           test "$(uname -m)" = "$BUILD_ARCH"
-          lipo dist/RXS.app/Contents/MacOS/rxs -verify_arch "$BUILD_ARCH"
-          codesign --verify --deep --strict dist/RXS.app
-          archive="RXS-${RELEASE_TAG}-macos-${BUILD_ARCH}.zip"
-          ditto -c -k --sequesterRsrc --keepParent dist/RXS.app "dist/$archive"
+          lipo dist/RSX.app/Contents/MacOS/rsx -verify_arch "$BUILD_ARCH"
+          codesign --verify --deep --strict dist/RSX.app
+          archive="RSX-${RELEASE_TAG}-macos-${BUILD_ARCH}.zip"
+          ditto -c -k --sequesterRsrc --keepParent dist/RSX.app "dist/$archive"
           # Check the actual downloadable bundle, including its executable and signature.
           check_dir=$(mktemp -d)
           ditto -x -k "dist/$archive" "$check_dir"
-          test -x "$check_dir/RXS.app/Contents/MacOS/rxs"
-          codesign --verify --deep --strict "$check_dir/RXS.app"
+          test -x "$check_dir/RSX.app/Contents/MacOS/rsx"
+          codesign --verify --deep --strict "$check_dir/RSX.app"
           cd dist
           shasum -a 256 "$archive" > "$archive.sha256"
 
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
-          name: rxs-${{ matrix.arch }}
+          name: rsx-${{ matrix.arch }}
           path: |
-            dist/RXS-*.zip
-            dist/RXS-*.zip.sha256
+            dist/RSX-*.zip
+            dist/RSX-*.zip.sha256
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
@@ -93,7 +93,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          pattern: rxs-*
+          pattern: rsx-*
           path: artifacts
           merge-multiple: true
 
@@ -101,7 +101,7 @@ jobs:
         working-directory: artifacts
         run: |
           for arch in arm64 x86_64; do
-            sha256sum --check "RXS-${RELEASE_TAG}-macos-${arch}.zip.sha256"
+            sha256sum --check "RSX-${RELEASE_TAG}-macos-${arch}.zip.sha256"
           done
 
       - name: Publish packages
@@ -112,8 +112,8 @@ jobs:
 
           - **Apple Silicon (M1 ou posterior):** baixe o ZIP `arm64`.
           - **Intel:** baixe o ZIP `x86_64`.
-          - Descompacte e arraste **RXS.app** para **Aplicativos**.
-          - Autorize a Gravação de Tela quando solicitada e configure os atalhos no menu do RXS.
+          - Descompacte e arraste **RSX.app** para **Aplicativos**.
+          - Autorize a Gravação de Tela quando solicitada e configure os atalhos no menu do RSX.
 
           Os pacotes têm assinatura ad-hoc, sem Developer ID ou notarização da Apple. O macOS pode bloquear a primeira abertura. Se você confia neste download, use **Ajustes do Sistema → Privacidade e Segurança → Abrir Mesmo Assim** após tentar abrir o app.
 
@@ -128,7 +128,7 @@ jobs:
             python3 -c 'import json; assert json.load(open("existing-release.json"))["isDraft"], "Release already published; use a new version tag"'
           else
             gh release create "$RELEASE_TAG" --verify-tag --draft \
-              --title "RXS $RELEASE_TAG" --notes-file release-notes.md "${prerelease[@]}"
+              --title "RSX $RELEASE_TAG" --notes-file release-notes.md "${prerelease[@]}"
           fi
           gh release upload "$RELEASE_TAG" artifacts/*.zip artifacts/*.sha256 --clobber
           gh release edit "$RELEASE_TAG" --draft=false "${prerelease[@]}"

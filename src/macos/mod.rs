@@ -2,6 +2,7 @@ mod capture;
 mod color_picker;
 mod diagnostics;
 mod editor;
+mod logs_viewer;
 mod preferences;
 mod render;
 mod shortcuts;
@@ -81,7 +82,7 @@ define_class!(
             let defaults = NSUserDefaults::standardUserDefaults();
             if !defaults.boolForKey(&NSString::from_str("onboardingComplete")) {
                 self.ivars().modal.set(true);
-                let result = alert(self.mtm(), "Bem-vindo ao RXS", "O RXS vive na barra de menus e usa a seleção de captura do macOS.\n\nPara usar Command+Shift+3 e Command+Shift+4, desative essas duas combinações em Ajustes do Sistema → Teclado → Atalhos de Teclado → Capturas de Tela. Mantenha Command+Shift+5 ativado.\n\nDepois escolha “Atalhos…” no menu do RXS. Você também pode usar outras combinações ou capturar pelo menu.", &["Configurar atalhos…", "Usar pelo menu"]);
+                let result = alert(self.mtm(), "Bem-vindo ao RSX", "O RSX vive na barra de menus e usa a seleção de captura do macOS.\n\nPara usar Command+Shift+3 e Command+Shift+4, desative essas duas combinações em Ajustes do Sistema → Teclado → Atalhos de Teclado → Capturas de Tela. Mantenha Command+Shift+5 ativado.\n\nDepois escolha “Atalhos…” no menu do RSX. Você também pode usar outras combinações ou capturar pelo menu.", &["Configurar atalhos…", "Usar pelo menu"]);
                 defaults.setBool_forKey(true, &NSString::from_str("onboardingComplete"));
                 self.ivars().modal.set(false);
                 if result == 1000 { self.preferences(sel!(preferences:), None); }
@@ -147,6 +148,7 @@ define_class!(
         }
         #[unsafe(method(selectTool:))]
         fn select_tool(&self, sender: &NSSegmentedControl) {
+            tracing::debug!(index = sender.selectedSegment(), "editor.tool_selected");
             if let Some(editor) = self.editor() { editor.canvas.set_tool(match sender.selectedSegment() { 1 => Tool::Rectangle, 2 => Tool::Freehand, _ => Tool::Arrow }); }
         }
         #[unsafe(method(toggleColors:))]
@@ -159,10 +161,12 @@ define_class!(
         }
         #[unsafe(method(undoDrawing:))]
         fn undo_drawing(&self, _sender: Option<&AnyObject>) {
+            tracing::debug!("editor.undo");
             if let Some(editor) = self.editor() { editor.canvas.ivars().document.borrow_mut().undo(); editor.canvas.setNeedsDisplay(true); editor.refresh(); }
         }
         #[unsafe(method(redoDrawing:))]
         fn redo_drawing(&self, _sender: Option<&AnyObject>) {
+            tracing::debug!("editor.redo");
             if let Some(editor) = self.editor() { editor.canvas.ivars().document.borrow_mut().redo(); editor.canvas.setNeedsDisplay(true); editor.refresh(); }
         }
         #[unsafe(method(zoomIn:))]
@@ -175,6 +179,7 @@ define_class!(
         fn actual_size(&self, _sender: Option<&AnyObject>) { if let Some(e) = self.editor() { e.set_zoom(1.0); } }
         #[unsafe(method(copyImage:))]
         fn copy_image(&self, _sender: Option<&AnyObject>) {
+            let _operation = crate::telemetry::Operation::start("image.copy");
             if self.ivars().modal.get() { return; }
             let Some(editor) = self.editor() else { return; };
             let result = autoreleasepool(|_| editor.copy_to(&NSPasteboard::generalPasteboard()));
@@ -182,12 +187,13 @@ define_class!(
         }
         #[unsafe(method(saveImage:))]
         fn save_image(&self, _sender: Option<&AnyObject>) {
+            let _operation = crate::telemetry::Operation::start("image.save");
             if self.ivars().modal.get() { return; }
             let Some(editor) = self.editor() else { return; };
             self.ivars().modal.set(true);
             let panel = NSSavePanel::savePanel(self.mtm());
             panel.setTitle(Some(&NSString::from_str("Salvar captura anotada")));
-            panel.setNameFieldStringValue(&NSString::from_str(&format!("RXS-{}.png", timestamp())));
+            panel.setNameFieldStringValue(&NSString::from_str(&format!("RSX-{}.png", timestamp())));
             #[allow(deprecated)]
             panel.setAllowedFileTypes(Some(&objc2_foundation::NSArray::from_retained_slice(&[NSString::from_str("png")])));
             panel.setCanCreateDirectories(true);
@@ -198,9 +204,10 @@ define_class!(
                     let data = editor.canvas.export()?;
                     atomic_save(std::path::Path::new(&path), unsafe { data.as_bytes_unchecked() })?;
                     editor.canvas.mark_exported(); editor.refresh();
+                    tracing::info!("image.saved");
                     Ok(())
                 })
-            } else { Ok(()) };
+            } else { tracing::info!("image.save_cancelled"); Ok(()) };
             self.ivars().modal.set(false);
             if let Err(error) = result { self.show_error("Falha ao salvar", &error); }
         }
@@ -209,9 +216,17 @@ define_class!(
             if self.ivars().capturing.get() || self.ivars().modal.replace(true) { return; }
             preferences::show(self);
             self.ivars().modal.set(false);
+            tracing::info!("preferences.closed");
         }
         #[unsafe(method(quit:))]
         fn quit(&self, _sender: Option<&AnyObject>) { NSApplication::sharedApplication(self.mtm()).terminate(None); }
+        #[unsafe(method(showLogs:))]
+        fn show_logs(&self, _sender: Option<&AnyObject>) {
+            if self.ivars().capturing.get() || self.ivars().modal.replace(true) { return; }
+            tracing::info!("logs.viewer_opened");
+            logs_viewer::show(self);
+            self.ivars().modal.set(false);
+        }
     }
 );
 
@@ -238,6 +253,7 @@ impl App {
         }
     }
     fn show_error(&self, title: &str, message: &str) {
+        crate::telemetry::error(title, message);
         let was_modal = self.ivars().modal.replace(true);
         alert(self.mtm(), title, message, &["OK"]);
         self.ivars().modal.set(was_modal);
@@ -259,6 +275,7 @@ impl App {
     fn close_editor(&self) {
         let editor = self.ivars().editor.borrow_mut().take();
         if let Some(editor) = editor {
+            tracing::info!("editor.closed");
             editor.window.setDelegate(None);
             editor.release_content();
             editor.window.close();
@@ -267,14 +284,22 @@ impl App {
             .setActivationPolicy(NSApplicationActivationPolicy::Accessory);
     }
     fn configure_shortcuts(&self, screen: &str, region: &str) -> Result<(), String> {
+        let _operation = crate::telemetry::Operation::start("shortcuts.configure");
         let mut slot = self.ivars().shortcuts.borrow_mut();
         if slot.is_none() {
             *slot = Some(shortcuts::Shortcuts::new()?);
         }
-        slot.as_mut().unwrap().configure(screen, region)
+        let result = slot.as_mut().unwrap().configure(screen, region);
+        match &result {
+            Ok(()) => tracing::info!("shortcuts.configured"),
+            Err(error) => crate::telemetry::error("Atalhos", error),
+        }
+        result
     }
     fn begin_capture(&self, mode: CaptureMode) {
+        tracing::info!(mode = ?mode, "capture.requested");
         if self.ivars().capturing.get() || self.ivars().modal.get() {
+            tracing::debug!("capture.busy");
             return;
         }
         if !self.screen_access() {
@@ -291,10 +316,14 @@ impl App {
             root: self.ivars().session.root.clone(),
         };
         std::thread::spawn(move || {
+            let _operation = crate::telemetry::Operation::start("capture.workflow");
             // Allow the window server to remove the menu/editor before capture.
             std::thread::sleep(std::time::Duration::from_millis(180));
             let outcome = backend.capture(mode);
+            let context = opentelemetry::Context::current();
             DispatchQueue::main().exec_async(move || {
+                let _context = context.attach();
+                let _operation = crate::telemetry::Operation::start("capture.finish");
                 autoreleasepool(|_| with_app(|app| app.finish_capture(outcome)))
             });
         });
@@ -310,11 +339,12 @@ impl App {
             objc2_core_graphics::CGRequestScreenCaptureAccess()
         };
         if !granted {
+            tracing::warn!("capture.permission_denied");
             let choice = alert(
                 self.mtm(),
-                "Reabra o RXS após autorizar",
-                "Autorize o RXS em Ajustes do Sistema → Privacidade e Segurança → Gravação de Tela. O macOS pode só aplicar essa alteração depois que o app é encerrado.\n\nSe o RXS já estiver ativado na lista, desative e ative novamente. Se ainda não funcionar, remova a entrada antiga e adicione a cópia do RXS que você está usando.",
-                &["Abrir Ajustes e encerrar RXS", "Agora não"],
+                "Reabra o RSX após autorizar",
+                "Autorize o RSX em Ajustes do Sistema → Privacidade e Segurança → Gravação de Tela. O macOS pode só aplicar essa alteração depois que o app é encerrado.\n\nSe o RSX já estiver ativado na lista, desative e ative novamente. Se ainda não funcionar, remova a entrada antiga e adicione a cópia do RSX que você está usando.",
+                &["Abrir Ajustes e encerrar RSX", "Agora não"],
             );
             if choice == 1000 {
                 open_settings(
@@ -332,6 +362,7 @@ impl App {
         self.ivars().capturing.set(false);
         match outcome {
             CaptureOutcome::Success(artifact) => {
+                tracing::info!("capture.succeeded");
                 // Discard was already authorized before capture. Free the old
                 // bitmap before decoding the new one to avoid overlapping peaks.
                 self.close_editor();
@@ -350,6 +381,7 @@ impl App {
                             editor.copy_to(&NSPasteboard::generalPasteboard())
                         };
                         editor.show();
+                        tracing::info!("editor.opened");
                         if let Err(error) = copied {
                             self.show_error(
                                 "Captura aberta, mas não copiada",
@@ -361,6 +393,7 @@ impl App {
                 }
             }
             CaptureOutcome::Cancelled => {
+                tracing::info!("capture.cancelled");
                 if let Some(editor) = self.editor() {
                     editor.show();
                 }
@@ -416,11 +449,12 @@ impl App {
         let app = NSApplication::sharedApplication(mtm);
         let main = NSMenu::new(mtm);
         let root = NSMenuItem::new(mtm);
-        root.setTitle(&NSString::from_str("RXS"));
+        root.setTitle(&NSString::from_str("RSX"));
         let app_menu = NSMenu::new(mtm);
-        app_menu.setTitle(&NSString::from_str("RXS"));
+        app_menu.setTitle(&NSString::from_str("RSX"));
         self.item(&app_menu, "Atalhos…", sel!(preferences:), ",", false);
-        self.item(&app_menu, "Sair do RXS", sel!(quit:), "q", false);
+        self.item(&app_menu, "Ver logs…", sel!(showLogs:), "", false);
+        self.item(&app_menu, "Sair do RSX", sel!(quit:), "q", false);
         root.setSubmenu(Some(&app_menu));
         main.addItem(&root);
         let file = NSMenuItem::new(mtm);
@@ -476,20 +510,21 @@ impl App {
         menu.addItem(&NSMenuItem::separatorItem(mtm));
         self.item(&menu, "Mostrar editor", sel!(showEditor:), "", false);
         self.item(&menu, "Atalhos…", sel!(preferences:), "", false);
+        self.item(&menu, "Ver logs…", sel!(showLogs:), "", false);
         menu.addItem(&NSMenuItem::separatorItem(mtm));
-        self.item(&menu, "Sair do RXS", sel!(quit:), "", false);
+        self.item(&menu, "Sair do RSX", sel!(quit:), "", false);
         let status = NSStatusBar::systemStatusBar().statusItemWithLength(-1.0);
         if let Some(button) = status.button(mtm) {
             if let Some(image) = NSImage::imageWithSystemSymbolName_accessibilityDescription(
                 &NSString::from_str("viewfinder"),
-                Some(&NSString::from_str("RXS — Capturas de tela")),
+                Some(&NSString::from_str("RSX — Capturas de tela")),
             ) {
                 image.setTemplate(true);
                 button.setImage(Some(&image));
             } else {
-                button.setTitle(&NSString::from_str("RXS"));
+                button.setTitle(&NSString::from_str("RSX"));
             }
-            button.setToolTip(Some(&NSString::from_str("RXS — Capturas de tela")));
+            button.setToolTip(Some(&NSString::from_str("RSX — Capturas de tela")));
         }
         status.setMenu(Some(&menu));
         *self.ivars().status.borrow_mut() = Some(status);
@@ -531,12 +566,22 @@ fn atomic_save(path: &std::path::Path, bytes: &[u8]) -> Result<(), String> {
 }
 
 pub fn run() {
-    let mtm = MainThreadMarker::new().expect("RXS must start on the main thread");
+    let mtm = MainThreadMarker::new().expect("RSX must start on the main thread");
     // AppKit uses the process name for the application menu when launched directly.
-    objc2_foundation::NSProcessInfo::processInfo().setProcessName(&NSString::from_str("RXS"));
+    objc2_foundation::NSProcessInfo::processInfo().setProcessName(&NSString::from_str("RSX"));
     let application = NSApplication::sharedApplication(mtm);
     application.setActivationPolicy(NSApplicationActivationPolicy::Accessory);
     let args: Vec<String> = std::env::args().collect();
+    if args.get(1).is_some_and(|arg| arg == "--logs-diagnostics") {
+        let path = args
+            .get(2)
+            .expect("--logs-diagnostics requires an output directory");
+        let path = std::path::Path::new(path);
+        std::fs::create_dir_all(path).expect("create logs diagnostics directory");
+        autoreleasepool(|_| logs_viewer::verify(mtm, path));
+        println!("Logs viewer checks passed.");
+        return;
+    }
     if args.get(1).is_some_and(|arg| arg == "--write-icon") {
         let path = args
             .get(2)
@@ -548,7 +593,8 @@ pub fn run() {
     let session = match Session::open() {
         Ok(session) => session,
         Err(error) => {
-            alert(mtm, "RXS", &error, &["OK"]);
+            crate::telemetry::error("Inicialização", &error);
+            alert(mtm, "RSX", &error, &["OK"]);
             return;
         }
     };

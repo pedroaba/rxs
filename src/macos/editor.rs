@@ -173,7 +173,13 @@ impl Canvas {
         self.ivars().document.borrow_mut().tool = tool;
     }
     pub fn export(&self) -> Result<Retained<objc2_foundation::NSData>, String> {
-        render::export(&self.ivars().image, &self.ivars().document.borrow())
+        let _operation = crate::telemetry::Operation::start("image.export");
+        let result = render::export(&self.ivars().image, &self.ivars().document.borrow());
+        match &result {
+            Ok(data) => tracing::info!(bytes = data.length(), "image.exported"),
+            Err(error) => crate::telemetry::error("Exportação", error),
+        }
+        result
     }
     pub fn needs_export(&self) -> bool {
         self.ivars().document.borrow().needs_export()
@@ -244,7 +250,7 @@ impl Editor {
             window.setReleasedWhenClosed(false);
             window.setContentMinSize(NSSize::new(900.0, 450.0));
         }
-        window.setTitle(&NSString::from_str("RXS — Anotar captura"));
+        window.setTitle(&NSString::from_str("RSX — Anotar captura"));
         window.setDelegate(Some(objc2::runtime::ProtocolObject::from_ref(app)));
         window.center();
         let content = window.contentView().unwrap();
@@ -491,9 +497,11 @@ impl Editor {
         self.refresh();
     }
     pub fn copy_to(&self, pasteboard: &NSPasteboard) -> Result<(), String> {
+        let _operation = crate::telemetry::Operation::start("clipboard.copy");
         let data = self.canvas.export()?;
         pasteboard.clearContents();
         if !pasteboard.setData_forType(Some(&data), unsafe { NSPasteboardTypePNG }) {
+            crate::telemetry::error("Clipboard", "Não foi possível copiar a imagem.");
             return Err("Não foi possível copiar a imagem.".into());
         }
         self.canvas.mark_exported();
@@ -501,6 +509,7 @@ impl Editor {
         self.status.setStringValue(&NSString::from_str(
             "Imagem copiada · ⌘C copia novamente com suas edições",
         ));
+        tracing::info!("clipboard.copied");
         Ok(())
     }
     pub fn refresh(&self) {

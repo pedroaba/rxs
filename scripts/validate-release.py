@@ -30,7 +30,7 @@ def main():
     metadata = json.loads(subprocess.check_output(
         ["cargo", "metadata", "--no-deps", "--locked", "--format-version", "1"], cwd=ROOT
     ))
-    package = next(p for p in metadata["packages"] if p["name"] == "rxs")
+    package = next(p for p in metadata["packages"] if p["name"] == "rsx")
     with (ROOT / "packaging/Info.plist").open("rb") as source:
         plist = plistlib.load(source)
     validate(sys.argv[1], package["version"], plist["CFBundleShortVersionString"])

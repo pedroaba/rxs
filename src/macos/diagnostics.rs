@@ -224,10 +224,12 @@ fn verify(editor: &Editor, output: &std::path::Path) -> Result<(), String> {
 pub fn run(app: &App, demo: bool) {
     let mut rows = vec!["phase,physical_footprint_mb,resident_mb".into()];
     record(&mut rows, "idle_start");
-    let output = std::env::var_os("RXS_DIAGNOSTICS_DIR")
+    let output = std::env::var_os("RSX_DIAGNOSTICS_DIR")
+        .or_else(|| std::env::var_os("RXS_DIAGNOSTICS_DIR"))
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("target/diagnostics"));
     fs::create_dir_all(&output).expect("create diagnostics output");
+    super::logs_viewer::verify(app.mtm(), &output);
     super::preferences::verify(app, &output);
     let fixture = autoreleasepool(|_| fixture(app)).expect("create 4K fixture");
     let fixture_path = output.join("source-4k.png");
@@ -237,7 +239,7 @@ pub fn run(app: &App, demo: bool) {
         let artifact = copy_fixture(app, &fixture_path);
         app.finish_capture(CaptureOutcome::Success(artifact));
         annotate(&app.editor().unwrap());
-        println!("RXS demo opened; synthetic 3840×2160 image.");
+        println!("RSX demo opened; synthetic 3840×2160 image.");
     } else {
         cycle(0, rows, output, fixture_path);
     }

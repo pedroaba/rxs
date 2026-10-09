@@ -28,12 +28,32 @@ cargo test --locked --test native_integration -- --ignored --test-threads=1 --no
 
 Esses dois testes ficam marcados como `ignored` apenas para evitar abertura de janelas e registro de atalhos na execução normal. O comando acima os executa e falha caso alguma verificação não passe.
 
-O teste do editor usa conteúdo sintético e clipboard privado. O processo filho recebe uma pasta temporária exclusiva para o lock e as capturas, sem limpar a sessão de uma instância real do RXS. Há um limite de 120 segundos e encerramento do processo em caso de falha. Os resultados são verificados antes da remoção da pasta temporária.
+O teste do editor usa conteúdo sintético e clipboard privado. O processo filho recebe uma pasta temporária exclusiva para o lock e as capturas, sem limpar a sessão de uma instância real do RSX. Há um limite de 120 segundos e encerramento do processo em caso de falha. Os resultados são verificados antes da remoção da pasta temporária.
 
-O teste de atalhos procura quatro combinações livres com Command+Control+Option+Shift e letras. Não altera `NSUserDefaults`, atalhos do sistema nem preferências do RXS. Os registros são temporários e liberados ao final, inclusive durante o desenrolamento de uma falha do teste. Evite pressionar essas combinações durante a execução. Se não houver quatro combinações disponíveis, o teste falha com uma mensagem explícita.
+O teste de atalhos procura quatro combinações livres com Command+Control+Option+Shift e letras. Não altera `NSUserDefaults`, atalhos do sistema nem preferências do RSX. Os registros são temporários e liberados ao final, inclusive durante o desenrolamento de uma falha do teste. Evite pressionar essas combinações durante a execução. Se não houver quatro combinações disponíveis, o teste falha com uma mensagem explícita.
 
 ## Integração contínua e limites
 
 O workflow `tests.yml` executa os testes normais e formatação em Linux e macOS para pushes e pull requests. O Clippy com avisos tratados como erros roda no macOS, plataforma do aplicativo; no Linux os módulos nativos não são usados. Os testes nativos com janelas ficam para a execução explícita em uma sessão gráfica.
 
 A suíte não comprova captura real com permissões do usuário, disparo por teclado físico, persistência de novas preferências após reiniciar nem interação com aplicativos de destino. Não simula resultados desses fluxos e não altera o código de produção para torná-los testáveis.
+
+## Visualizador de logs
+
+Os testes em `src/logs.rs` verificam leitura de backups e registros legados,
+ordenação, filtros, busca por atributos e trace, limites de histórico, leitura
+parcial de arquivos grandes, linhas incompletas e exclusão de links simbólicos.
+O diagnóstico nativo também confere filtros e busca com conteúdo sintético,
+texto somente de leitura, estado vazio e fechamento pelo delegate da janela;
+gera `logs-light.png` e `logs-dark.png` para inspeção visual.
+
+Para conferir somente essa janela, sem os 50 ciclos do editor:
+
+```sh
+cargo build --locked
+target/debug/rsx --logs-diagnostics target/logs-diagnostics
+```
+
+Esse modo não lê o histórico pessoal nem captura a tela; usa registros
+sintéticos. O coletor normal de telemetria continua registrando o ciclo de vida
+da execução localmente.
